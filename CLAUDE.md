@@ -219,6 +219,7 @@ This scaffold was produced by `/senior-be-architect`. Its scope was strictly arc
 > When something here turns out to be wrong: fix the code **and** fix this file in the same PR. A drifted CLAUDE.md is worse than no CLAUDE.md.
 
 <!-- SPECKIT START -->
-For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
+Active feature plan: `specs/001-address-capture-api/plan.md`
+(spec, research, data-model, contracts, and quickstart alongside it).
+Read it for the current feature's technical context and structure.
 <!-- SPECKIT END -->

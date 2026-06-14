@@ -137,3 +137,7 @@ metadata (field names, validation rules).
 ```
 /speckit-specify
 ```
+5. Run in terminal agents:
+```
+/speckit-plan
+```

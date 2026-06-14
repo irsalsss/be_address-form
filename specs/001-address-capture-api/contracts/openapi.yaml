@@ -1,0 +1,172 @@
+openapi: 3.1.0
+info:
+  title: acme-address-api — Country-Aware Address Capture
+  version: 1.0.0
+  description: >
+    Backend for capturing country-shaped addresses. Country metadata is the
+    single source of truth for dynamic form rendering and server validation.
+    This contract is a planning sketch; the authoritative spec is generated from
+    Zod schemas via fastify-type-provider-zod (Principle VII).
+servers:
+  - url: /api/v1
+paths:
+  /countries:
+    get:
+      operationId: listCountries
+      summary: List supported countries
+      responses:
+        "200":
+          description: Supported countries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  countries:
+                    type: array
+                    items: { $ref: "#/components/schemas/CountrySummary" }
+  /countries/{code}/fields:
+    get:
+      operationId: getCountryFields
+      summary: Get a country's field layout + validation rules
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string, example: IDN }
+      responses:
+        "200":
+          description: Field layout
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: string }
+                  name: { type: string }
+                  fields:
+                    type: array
+                    items: { $ref: "#/components/schemas/FieldDef" }
+        "404":
+          description: Unsupported country
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+  /addresses:
+    post:
+      operationId: createAddress
+      summary: Validate (per country) and store an address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAddressRequest" }
+      responses:
+        "201":
+          description: Stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Address" }
+        "400":
+          description: Validation failure or unsupported country
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+    get:
+      operationId: listAddresses
+      summary: List all saved addresses (demo)
+      responses:
+        "200":
+          description: All addresses
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  addresses:
+                    type: array
+                    items: { $ref: "#/components/schemas/Address" }
+  /addresses/{id}:
+    get:
+      operationId: getAddress
+      summary: Get a saved address by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Address
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Address" }
+        "404":
+          description: Not found
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+components:
+  schemas:
+    CountrySummary:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string, example: USA }
+        name: { type: string, example: United States }
+    FieldDef:
+      type: object
+      required: [key, label, required, type]
+      properties:
+        key: { type: string, example: zip }
+        label: { type: string, example: ZIP Code }
+        required: { type: boolean }
+        type: { type: string, enum: [text, dropdown] }
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              value: { type: string }
+              label: { type: string }
+        validation:
+          type: object
+          properties:
+            length: { type: integer }
+            numeric: { type: boolean }
+            pattern: { type: string }
+        order: { type: integer }
+    CreateAddressRequest:
+      type: object
+      required: [country, fields]
+      properties:
+        country: { type: string, example: AUS }
+        fields:
+          type: object
+          additionalProperties: { type: string }
+          description: Keys/values per the country's field layout
+          example:
+            line1: "1 Macquarie St"
+            suburb: "Sydney"
+            state: "NSW"
+            postcode: "2000"
+    Address:
+      type: object
+      required: [id, country, fields, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        country: { type: string }
+        fields:
+          type: object
+          additionalProperties: { type: string }
+        createdAt: { type: string, format: date-time }
+    Problem:
+      type: object
+      description: RFC 7807 application/problem+json
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        code: { type: string }
