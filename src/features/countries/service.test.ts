@@ -7,12 +7,20 @@ import {
 import { NotFoundError, BadRequestError } from "../../shared/errors.js";
 
 describe("countries service — metadata", () => {
-  it("lists the three countries with code + name", () => {
-    expect(listCountries()).toEqual([
+  it("lists the three countries with code + name + per-country version", () => {
+    const list = listCountries();
+    expect(list.map((c) => ({ code: c.code, name: c.name }))).toEqual([
       { code: "USA", name: "United States" },
       { code: "AUS", name: "Australia" },
       { code: "IDN", name: "Indonesia" },
     ]);
+    for (const c of list) expect(c.version).toMatch(/^sha256:[0-9a-f]{16}$/);
+  });
+
+  it("list version equals the same country's fields version (FR-001)", () => {
+    for (const c of listCountries()) {
+      expect(c.version).toBe(getCountryFields(c.code).version);
+    }
   });
 
   it("returns IDN fields in declared order with order indexes", () => {
@@ -36,6 +44,44 @@ describe("countries service — metadata", () => {
 
   it("throws NotFoundError for an unknown country", () => {
     expect(() => getCountryFields("XX")).toThrow(NotFoundError);
+  });
+
+  it("returns a stable, sha256-prefixed version (FR-001/004, SC-002)", () => {
+    const a = getCountryFields("USA");
+    const b = getCountryFields("USA");
+    expect(a.version).toBe(b.version);
+    expect(a.version).toMatch(/^sha256:[0-9a-f]{16}$/);
+  });
+
+  it("resolves aliases to identical metadata + version (FR-015)", () => {
+    const canonical = getCountryFields("USA");
+    const alias = getCountryFields("us");
+    expect(alias).toEqual(canonical);
+    expect(alias.version).toBe(canonical.version);
+  });
+
+  it("payload is complete enough to render + validate for every country (FR-005/006/007, SC-001)", () => {
+    for (const { code } of listCountries()) {
+      const meta = getCountryFields(code);
+      meta.fields.forEach((f, i) => {
+        const at = `${code}.${f.key}`;
+        expect(typeof f.key, at).toBe("string");
+        expect(f.key.length, at).toBeGreaterThan(0);
+        expect(typeof f.label, at).toBe("string");
+        expect(f.label.length, at).toBeGreaterThan(0);
+        expect(typeof f.required, at).toBe("boolean");
+        expect(["text", "dropdown"], at).toContain(f.type);
+        expect(f.order, at).toBe(i);
+        if (f.type === "dropdown") {
+          expect(f.options, at).toBeDefined();
+          expect(f.options!.length, at).toBeGreaterThan(0);
+          for (const o of f.options!) {
+            expect(typeof o.value, at).toBe("string");
+            expect(typeof o.label, at).toBe("string");
+          }
+        }
+      });
+    }
   });
 });
 
@@ -63,6 +109,14 @@ describe("countries service — buildAddressValidator", () => {
   it("accepts omitted optional fields (line2 / village)", () => {
     const { schema } = buildAddressValidator("USA");
     expect(() => schema.parse(valid.USA)).not.toThrow();
+  });
+
+  it("treats empty/blank optional fields as omitted (line2)", () => {
+    const { schema } = buildAddressValidator("USA");
+    for (const blank of ["", "   "]) {
+      const parsed = schema.parse({ ...valid.USA, line2: blank });
+      expect(parsed.line2).toBeUndefined();
+    }
   });
 
   it("rejects a missing required field (AUS suburb)", () => {
@@ -107,12 +161,28 @@ describe("countries service — buildAddressValidator", () => {
       schema.parse({ ...valid.USA, line1: "x".repeat(201) }),
     ).toThrow();
   });
+
+  it("emits human-readable, field-labelled messages clients can show verbatim", () => {
+    const { schema } = buildAddressValidator("USA");
+    const flat = (fields: Record<string, unknown>) =>
+      schema.safeParse(fields).error!.flatten().fieldErrors;
+
+    expect(flat({ ...valid.USA, zip: "12" }).zip).toEqual([
+      "ZIP Code must be exactly 5 digits",
+    ]);
+    expect(flat({ ...valid.USA, state: "ZZ" }).state).toEqual([
+      "State must be one of the listed options",
+    ]);
+    const { city, ...noCity } = valid.USA;
+    void city;
+    expect(flat(noCity).city).toEqual(["City is required"]);
+  });
 });
 
 describe("countries service — client/server parity (FR-014 / SC-003)", () => {
-  // The validation rules served by the metadata API must produce the same
-  // accept/reject decision as the submit validator, because both derive from
-  // the same registry. Verify the served constraints match the validator.
+  // The validation rules sent by the metadata API must give the same
+  // accept/reject result as the submit validator, because both come from the
+  // same registry. Check that the sent rules match the validator.
   it("served postal validation matches validator rejection", () => {
     for (const code of ["USA", "AUS", "IDN"] as const) {
       const meta = getCountryFields(code);
@@ -121,7 +191,7 @@ describe("countries service — client/server parity (FR-014 / SC-003)", () => {
       const len = postal!.validation!.length!;
       const tooShort = "1".repeat(len - 1);
       const { schema } = buildAddressValidator(code);
-      // a value violating the served length must be rejected by the validator
+      // a value that breaks the sent length must be rejected by the validator
       const probe = { [postal!.key]: tooShort };
       expect(() => schema.parse(probe)).toThrow();
     }

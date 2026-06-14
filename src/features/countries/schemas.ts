@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-// Metadata response schemas — registered on the metadata routes so the OpenAPI
-// spec is generated from these (Principle VII).
+// Schemas for the metadata responses. They are added to the metadata routes,
+// so the OpenAPI spec is built from them (Principle VII).
 
 export const fieldOptionSchema = z.object({
   value: z.string(),
@@ -28,6 +28,10 @@ export const fieldDefSchema = z.object({
 export const countrySummarySchema = z.object({
   code: z.string(),
   name: z.string(),
+  // Same content-derived token as the fields endpoint's `version`. Exposed here
+  // so a client can build its per-country cache key straight from the list,
+  // without first fetching each country's fields (FR-001).
+  version: z.string(),
 });
 
 export const countriesResponseSchema = z.object({
@@ -37,6 +41,9 @@ export const countriesResponseSchema = z.object({
 export const countryFieldsResponseSchema = z.object({
   code: z.string(),
   name: z.string(),
+  // A cache token made from this country's field layout (FR-001). It changes
+  // only when the field definitions change; clients cache and refresh on it.
+  version: z.string(),
   fields: z.array(fieldDefSchema),
 });
 

@@ -13,8 +13,38 @@ cp .env.example .env    # then edit DATABASE_URL
 pnpm install
 docker compose up -d db  # start Postgres
 pnpm db:migrate          # apply migrations
-pnpm dev                 # http://localhost:3000
+pnpm dev                 # http://localhost:4000
 ```
+
+## Local Postgres on port 5432
+
+If you already run a Postgres on your host's `localhost:5432`, it shadows the
+docker container (loopback wins over the container's `*` bind), and migrations /
+tests connect to the wrong database (`role "app" does not exist`).
+
+Two fixes:
+
+- **Simplest**: stop the host Postgres while running the DB suite
+  (`brew services stop postgresql@NN`), then restart it after.
+- **Run both side by side** (no committed changes): create a local
+  `docker-compose.override.yml` (gitignored) mapping the container to host port
+  `5433`, and point `.env` at it:
+
+  ```yaml
+  # docker-compose.override.yml
+  services:
+    db:
+      ports: ["5433:5432"]
+  ```
+
+  ```bash
+  # .env
+  DATABASE_URL=postgres://app:app@localhost:5433/app
+  ```
+
+  `docker compose up -d db` auto-merges the override; `pnpm db:migrate` and the
+  app both read `.env`, so everything targets `5433`. Teammates/CI are
+  unaffected (the override is local-only).
 
 ## Endpoints
 
@@ -22,6 +52,11 @@ pnpm dev                 # http://localhost:3000
 |---|---|---|
 | GET | `/health` | Liveness check |
 | GET | `/docs` | Swagger UI (dev only) |
+| GET | `/api/v1/countries` | Supported countries (`code`, `name`, `version`) for the selector — `version` lets a client build its per-country cache key from the list alone |
+| GET | `/api/v1/countries/:code/fields` | Field metadata for a country: per-field `label`, `required`, `type`, `options`, `validation`, `order`, plus the same content-derived `version` for client caching |
+| POST | `/api/v1/addresses` | Create an address (validated against the country's registry-derived strict schema) |
+| GET | `/api/v1/addresses` | List stored addresses (offset pagination) |
+| GET | `/api/v1/addresses/:id` | Fetch one address |
 
 ## Architecture
 
@@ -51,6 +86,12 @@ I built this against the "country-aware address capture" brief. Here's the think
 6. **Forgiving on input, strict on storage.**
    Mixed casing and ISO alpha-2 codes resolve to one canonical code.
 
+7. **A content-derived `version` token drives client caching.**
+   Each country's field layout is hashed (`sha256:` prefix). Same value across requests/restarts, changes only when the definitions do. Exposed on both the list and fields endpoints so a client can cache and refresh per country without a round-trip. It's a cache tag, not a security token.
+
+8. **Validation errors are human-readable and field-labelled.**
+   Messages like `Postcode must be exactly 4 digits` are surfaced verbatim next to the offending input. Optional fields treat a blank/whitespace value as "not provided", and registry `pattern` rules are kept ReDoS-safe (no nested open-ended repeats), checked by a registry test.
+
 ### Trade-offs
 
 | Decision | The trade-off | Why it's fine for this scope, and what I'd do at scale |
@@ -65,131 +106,3 @@ I built this against the "country-aware address capture" brief. Here's the think
 ### If I'd had more than the timebox
 
 I'd add cursor-based pagination, a small integration test against a throwaway Postgres (testcontainers) that runs the full POST then GET round-trip for each country, and I'd promote `country_code` plus a couple of hot fields out of `jsonb` once real query patterns made the case for it.
-
-## Step-by-Step AI Workflow
-1. Initiate the repo by prompting to AI:
-```
-/senior-be-architect, initiate Fastify, Typescript
-```
-
-2. Init [spec-kit](https://github.com/github/spec-kit)
-3. Run in terminal agents:
-```
-/speckit-constitution add principles for this project that will cater all the needs 
-  in this reqs (for BE only):                                                                       
-  Background                                                                          
-                                                                                      
-  AcmeCorp is building a new customer onboarding flow that collects user addresses.   
-  Since addresses vary by country, the company needs a dynamic form system that       
-  adapts based on the selected country.                                               
-                                                                                      
-  The design requirements are:                                                        
-                                                                                      
-  - Country dropdown at the top of the page.                                          
-                                                                                      
-  - Address input with Google Places autocomplete for quick entry.                    
-                                                                                      
-  - A “Manually Edit” button that switches the form into manual entry mode.           
-                                                                                      
-  - In manual mode, the form layout should dynamically adjust fields based on the     
-  selected country.                                                                   
-                                                                                      
-  - Captured addresses must be saved to a backend service and stored in a database.   
-                                                                                      
-  Supported Countries & Field Layouts                                                 
-                                                                                      
-  1. United States (USA)                                                              
-                                                                                      
-  - Address Line 1 (required)                                                         
-                                                                                      
-  - Address Line 2 (optional)                                                         
-                                                                                      
-  - City (required)                                                                   
-                                                                                      
-  - State (dropdown: e.g., CA, NY, TX)                                                
-                                                                                      
-  - ZIP Code (5-digit, required)                                                      
-                                                                                      
-  2. Australia (AUS)                                                                  
-                                                                                      
-  - Address Line 1 (required)                                                         
-                                                                                      
-  - Address Line 2 (optional)                                                         
-                                                                                      
-  - Suburb (required)                                                                 
-                                                                                      
-  - State (dropdown: NSW, VIC, QLD, WA, SA, TAS, ACT, NT)                             
-                                                                                      
-  - Postcode (4-digit, required)                                                      
-                                                                                      
-  3. Indonesia (IDN)                                                                  
-                                                                                      
-  - Province (dropdown: e.g., Jawa Barat, Bali, Sumatra Utara)                        
-                                                                                      
-  - City / Regency (required)                                                         
-                                                                                      
-  - District (Kecamatan, required)                                                    
-                                                                                      
-  - Village (Kelurahan/Desa, optional)                                                
-                                                                                      
-  - Postal Code (required, 5-digit)                                                   
-                                                                                      
-  - Street Address (required)                                                         
-                                                                                      
-Your Task (Timebox: 2 hours)                                                          
-                                                                                      
-Build a small end-to-end application that demonstrates this feature.                  
-                                                                                      
-Frontend Requirements                                                                 
-                                                                                      
-- Dropdown to select country.                                                         
-                                                                                      
-- Address input with Google Places autocomplete integration.                          
-                                                                                      
-- “Manually Edit” button that dynamically renders address fields appropriate to the   
-country.                                                                              
-                                                                                      
-- Validation for required fields (configurable per country).                          
-                                                                                      
-- Clean, responsive UI.                                                               
-                                                                                      
-Backend Requirements                                                                  
-                                                                                      
-- API to receive and store address data.                                              
-                                                                                      
-- Simple database schema for addresses (e.g., country, city, postal code, line1,      
-line2, etc.).                                                                         
-                                                                                      
-- API to retrieve saved addresses (for demo purposes).                                
-                                                                                      
-Notes                                                                                 
-                                                                                      
-- Please use the React framework.                                                     
-                                                                                      
-- For backend, use a lightweight framework (Express, Hono, Fastify).                  
-                                                                                      
-- Database can be in-memory (SQLite) or mock if needed.                               
-                                                                                      
-- Bonus: show how you would design the API to support dynamic country-specific        
-metadata (field names, validation rules).
-```
-4. Run in terminal agent:
-```
-/speckit-specify
-```
-5. Run in terminal agent:
-```
-/speckit-plan
-```
-6. Run in terminal agent:
-```
-/speckit-tasks
-```
-7. Run in terminal agent:
-```
-/speckit-implement
-```
-8. To review my changes, Run in terminal agent:
-```
-/senior-backend-reviewer, review all the pushed changes here before I create the PR. 
-```

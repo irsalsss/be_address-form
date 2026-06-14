@@ -54,6 +54,28 @@ describe("addresses routes", () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it("rule violation → 400 with human-readable details.fieldErrors keyed by field", async () => {
+    const res = await post({
+      country: "USA",
+      fields: { line1: "1 Loop", city: "Cupertino", state: "CA", zip: "12" },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.details.fieldErrors.zip).toEqual([
+      "ZIP Code must be exactly 5 digits",
+    ]);
+  });
+
+  it("unknown extra field → 400 with the key in details.formErrors (banner)", async () => {
+    const res = await post({
+      country: "USA",
+      fields: { line1: "1 Loop", city: "Cupertino", state: "CA", zip: "95014", bogus: "x" },
+    });
+    expect(res.statusCode).toBe(400);
+    const errs: string[] = res.json().details.formErrors;
+    expect(errs.some((m) => m.includes("bogus"))).toBe(true);
+  });
+
   it("unsupported country → 400", async () => {
     const res = await post({ country: "FR", fields: { line1: "x" } });
     expect(res.statusCode).toBe(400);
