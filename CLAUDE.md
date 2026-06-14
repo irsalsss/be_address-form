@@ -37,7 +37,18 @@ src/
     health/
       routes.ts         GET /health
       index.ts          barrel export
-    # Add new features here: features/addresses/, features/countries/, etc.
+    countries/          country metadata = single source of truth
+      registry.ts       USA/AUS/IDN field layouts + validation rules (data, not code)
+      service.ts        list/get metadata; buildAddressValidator() derives Zod from registry
+      schemas.ts        metadata response Zod schemas
+      routes.ts         GET /api/v1/countries, GET /api/v1/countries/:code/fields
+      index.ts          barrel (exports validator + metadata + normalizeCountryCode)
+    addresses/          capture + retrieve addresses
+      schemas.ts        create request / address response Zod schemas
+      repository.ts     ONLY db importer — insert/list/findById on addresses table
+      service.ts        validate via countries registry, persist, map
+      routes.ts         POST /api/v1/addresses, GET /api/v1/addresses[/:id]
+      index.ts          barrel
   plugins/
     cors.ts             @fastify/cors — origins from CORS_ORIGINS env
     error-handler.ts    AppError → RFC 7807 problem+json; ZodError → 400
@@ -51,7 +62,7 @@ src/
       problem.ts        RFC 7807 ProblemDetails + toProblem() helper
     db/
       client.ts         drizzle(postgres(env.DATABASE_URL))
-      schema.ts         EMPTY — owned by senior-data-engineer
+      schema.ts         addresses table (id, country_code, fields jsonb, created_at)
 tests/
   health.test.ts        Vitest — uses app.inject() (no real socket)
   setup.ts              NODE_ENV=test, PORT=0

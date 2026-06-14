@@ -29,9 +29,9 @@ Single web-service project. Source in `src/`, co-located `*.test.ts`. Migrations
 
 **Purpose**: Feature scaffolding before any story logic.
 
-- [ ] T001 Create `src/features/countries/` and `src/features/addresses/` folders with empty `index.ts` barrels per plan.md structure
-- [ ] T002 [P] Add `API_PREFIX`/version note — confirm routes register under `/api/v1` in `src/app.ts` (no new env needed; reuse existing `env.ts`)
-- [ ] T003 [P] Verify test harness: `tests/setup.ts` sets `NODE_ENV=test`, `PORT=0`, dummy `DATABASE_URL`; confirm a real-Postgres connection string for repository tests is available (docker compose `db`)
+- [X] T001 Create `src/features/countries/` and `src/features/addresses/` folders with empty `index.ts` barrels per plan.md structure
+- [X] T002 [P] Add `API_PREFIX`/version note — confirm routes register under `/api/v1` in `src/app.ts` (no new env needed; reuse existing `env.ts`)
+- [X] T003 [P] Verify test harness: `tests/setup.ts` sets `NODE_ENV=test`, `PORT=0`, dummy `DATABASE_URL`; confirm a real-Postgres connection string for repository tests is available (docker compose `db`)
 
 ---
 
@@ -39,10 +39,10 @@ Single web-service project. Source in `src/`, co-located `*.test.ts`. Migrations
 
 **Purpose**: Persistence + country registry that every story depends on. MUST complete before US1/US2/US3.
 
-- [ ] T004 Define `addresses` table in `src/shared/db/schema.ts` — `id` uuid PK (uuidv7 default), `country_code` varchar(3) not null, `fields` jsonb not null, `created_at` timestamptz not null default now(); index on `created_at` desc (per data-model.md)
-- [ ] T005 Generate + apply migration: `pnpm db:generate` then `pnpm db:migrate`; confirm `drizzle/<timestamp>_*.sql` created (append-only — do not edit after)
-- [ ] T006 Create country registry types + data in `src/features/countries/registry.ts` — `Country`, `CountryFieldDef` types and USA/AUS/IDN entries with full field layouts, dropdown option sets (50 US states+DC, 8 AUS states, IDN province list), and validation rules (zip 5 / postcode 4 / postal 5, numeric) per data-model.md
-- [ ] T007 [P] Test registry integrity in `src/features/countries/registry.test.ts` — every dropdown field has non-empty `options`; field `key`s unique per country; ordered; required flags match spec layouts
+- [X] T004 Define `addresses` table in `src/shared/db/schema.ts` — `id` uuid PK (uuidv7 default), `country_code` varchar(3) not null, `fields` jsonb not null, `created_at` timestamptz not null default now(); index on `created_at` desc (per data-model.md)
+- [X] T005 Generate + apply migration: `pnpm db:generate` then `pnpm db:migrate`; confirm `drizzle/<timestamp>_*.sql` created (append-only — do not edit after)
+- [X] T006 Create country registry types + data in `src/features/countries/registry.ts` — `Country`, `CountryFieldDef` types and USA/AUS/IDN entries with full field layouts, dropdown option sets (50 US states+DC, 8 AUS states, IDN province list), and validation rules (zip 5 / postcode 4 / postal 5, numeric) per data-model.md
+- [X] T007 [P] Test registry integrity in `src/features/countries/registry.test.ts` — every dropdown field has non-empty `options`; field `key`s unique per country; ordered; required flags match spec layouts
 
 **Checkpoint**: DB table live, registry is the single source of truth.
 
@@ -56,24 +56,24 @@ Single web-service project. Source in `src/`, co-located `*.test.ts`. Migrations
 
 ### Validator + schemas (registry-derived)
 
-- [ ] T008 [US1] Implement `buildAddressValidator(code)` in `src/features/countries/service.ts` — derive a `.strict()` Zod object from a country's field defs (required text → trim min 1; optional text → optional; dropdown → `z.enum(options)`; numeric+length → `regex(/^\d{N}$/)`); throw `BadRequestError` on unsupported country
-- [ ] T009 [US1] Export `buildAddressValidator` + `isSupportedCountry` + canonical-code normalizer from `src/features/countries/index.ts` barrel (US `us`→`USA`)
-- [ ] T010 [P] [US1] Test validator derivation in `src/features/countries/service.test.ts` — per country: accept valid; reject missing required, bad dropdown value, wrong postal length, non-numeric postal, unknown extra field, whitespace-only required
-- [ ] T011 [US1] Define request/response Zod schemas in `src/features/addresses/schemas.ts` — `CreateAddressRequest` (`country: string`, `fields: record`), `AddressResponse` (`id`, `country`, `fields`, `createdAt`); register-able via `fastify-type-provider-zod`
-- [ ] T012 [P] [US1] Test schema shapes in `src/features/addresses/schemas.test.ts` — request rejects missing `country`/`fields`; response serializes `createdAt` as ISO
+- [X] T008 [US1] Implement `buildAddressValidator(code)` in `src/features/countries/service.ts` — derive a `.strict()` Zod object from a country's field defs (required text → trim min 1; optional text → optional; dropdown → `z.enum(options)`; numeric+length → `regex(/^\d{N}$/)`); throw `BadRequestError` on unsupported country
+- [X] T009 [US1] Export `buildAddressValidator` + `isSupportedCountry` + canonical-code normalizer from `src/features/countries/index.ts` barrel (US `us`→`USA`)
+- [X] T010 [P] [US1] Test validator derivation in `src/features/countries/service.test.ts` — per country: accept valid; reject missing required, bad dropdown value, wrong postal length, non-numeric postal, unknown extra field, whitespace-only required
+- [X] T011 [US1] Define request/response Zod schemas in `src/features/addresses/schemas.ts` — `CreateAddressRequest` (`country: string`, `fields: record`), `AddressResponse` (`id`, `country`, `fields`, `createdAt`); register-able via `fastify-type-provider-zod`
+- [X] T012 [P] [US1] Test schema shapes in `src/features/addresses/schemas.test.ts` — request rejects missing `country`/`fields`; response serializes `createdAt` as ISO
 
 ### Repository (only file importing db)
 
-- [ ] T013 [US1] Implement `insertAddress(countryCode, fields)` in `src/features/addresses/repository.ts` — sole importer of `db` from `shared/db/client.ts`; insert + return row
-- [ ] T014 [US1] Test `insertAddress` against real Postgres in `src/features/addresses/repository.test.ts` — round-trip fidelity: stored `fields` equal submitted (SC-001); `created_at` populated
+- [X] T013 [US1] Implement `insertAddress(countryCode, fields)` in `src/features/addresses/repository.ts` — sole importer of `db` from `shared/db/client.ts`; insert + return row
+- [X] T014 [US1] Test `insertAddress` against real Postgres in `src/features/addresses/repository.test.ts` — round-trip fidelity: stored `fields` equal submitted (SC-001); `created_at` populated
 
 ### Service + route
 
-- [ ] T015 [US1] Implement `createAddress(input)` in `src/features/addresses/service.ts` — normalize country code, build validator via `countries` barrel, parse `fields`, call repository, map to `AddressResponse`; framework-free (no Fastify imports)
-- [ ] T016 [P] [US1] Test `createAddress` service in `src/features/addresses/service.test.ts` — valid persists+maps; invalid throws `BadRequestError`; unsupported country rejected
-- [ ] T017 [US1] Implement `POST /addresses` in `src/features/addresses/routes.ts` (under `/api/v1`) — register Zod schemas, call service, return 201; export `addressesRoutes` via `index.ts`
-- [ ] T018 [US1] Register `addressesRoutes` in `src/app.ts` with the Zod type provider
-- [ ] T019 [P] [US1] Route test in `src/features/addresses/routes.test.ts` via `app.inject()` — valid USA → 201 + id; AUS missing suburb → 400 problem+json naming field; IDN 4-digit postal → 400; unsupported country → 400; extra field → 400
+- [X] T015 [US1] Implement `createAddress(input)` in `src/features/addresses/service.ts` — normalize country code, build validator via `countries` barrel, parse `fields`, call repository, map to `AddressResponse`; framework-free (no Fastify imports)
+- [X] T016 [P] [US1] Test `createAddress` service in `src/features/addresses/service.test.ts` — valid persists+maps; invalid throws `BadRequestError`; unsupported country rejected
+- [X] T017 [US1] Implement `POST /addresses` in `src/features/addresses/routes.ts` (under `/api/v1`) — register Zod schemas, call service, return 201; export `addressesRoutes` via `index.ts`
+- [X] T018 [US1] Register `addressesRoutes` in `src/app.ts` with the Zod type provider
+- [X] T019 [P] [US1] Route test in `src/features/addresses/routes.test.ts` via `app.inject()` — valid USA → 201 + id; AUS missing suburb → 400 problem+json naming field; IDN 4-digit postal → 400; unsupported country → 400; extra field → 400
 
 **Checkpoint**: US1 independently shippable — addresses can be validated + stored. **MVP.**
 
@@ -85,12 +85,12 @@ Single web-service project. Source in `src/`, co-located `*.test.ts`. Migrations
 
 **Independent Test**: Save two → list returns both; get by known id → 200; unknown id → 404.
 
-- [ ] T020 [US2] Add `listAddresses()` and `findAddressById(id)` to `src/features/addresses/repository.ts` — order list by `created_at` desc; `findById` returns null when absent
-- [ ] T021 [P] [US2] Repository tests in `src/features/addresses/repository.test.ts` — list returns inserted rows ordered; `findById` hit + miss (null)
-- [ ] T022 [US2] Add `getAllAddresses()` and `getAddressById(id)` to `src/features/addresses/service.ts` — map rows to `AddressResponse`; throw `NotFoundError` on missing id
-- [ ] T023 [P] [US2] Service tests in `src/features/addresses/service.test.ts` — list maps all; by-id maps one; missing → `NotFoundError`
-- [ ] T024 [US2] Add `GET /addresses` and `GET /addresses/:id` to `src/features/addresses/routes.ts` — uuid param schema; register response schemas
-- [ ] T025 [P] [US2] Route tests via `app.inject()` in `src/features/addresses/routes.test.ts` — list → 200 with both; by id → 200; nonexistent uuid → 404 (distinct from empty-list 200, SC-006)
+- [X] T020 [US2] Add `listAddresses()` and `findAddressById(id)` to `src/features/addresses/repository.ts` — order list by `created_at` desc; `findById` returns null when absent
+- [X] T021 [P] [US2] Repository tests in `src/features/addresses/repository.test.ts` — list returns inserted rows ordered; `findById` hit + miss (null)
+- [X] T022 [US2] Add `getAllAddresses()` and `getAddressById(id)` to `src/features/addresses/service.ts` — map rows to `AddressResponse`; throw `NotFoundError` on missing id
+- [X] T023 [P] [US2] Service tests in `src/features/addresses/service.test.ts` — list maps all; by-id maps one; missing → `NotFoundError`
+- [X] T024 [US2] Add `GET /addresses` and `GET /addresses/:id` to `src/features/addresses/routes.ts` — uuid param schema; register response schemas
+- [X] T025 [P] [US2] Route tests via `app.inject()` in `src/features/addresses/routes.test.ts` — list → 200 with both; by id → 200; nonexistent uuid → 404 (distinct from empty-list 200, SC-006)
 
 **Checkpoint**: US1 + US2 — full capture + retrieval demo path.
 
@@ -102,13 +102,13 @@ Single web-service project. Source in `src/`, co-located `*.test.ts`. Migrations
 
 **Independent Test**: GET `/countries` → USA/AUS/IDN; GET `/countries/IDN/fields` → province dropdown, required district, optional village, 5-digit postal, in order; unsupported code → 404.
 
-- [ ] T026 [US3] Add `listCountries()` and `getCountryFields(code)` to `src/features/countries/service.ts` — project registry entries to summaries + ordered field-def metadata; throw `NotFoundError` for unknown code
-- [ ] T027 [US3] Define metadata response Zod schemas in `src/features/countries/schemas.ts` — `CountrySummary`, `FieldDef` (key,label,required,type,options?,validation?,order)
-- [ ] T028 [P] [US3] Service tests in `src/features/countries/service.test.ts` — list returns 3; AUS fields expose exactly 8-state dropdown; USA zip validation length 5; unknown code → `NotFoundError`
-- [ ] T029 [US3] Implement `GET /countries` and `GET /countries/:code/fields` in `src/features/countries/routes.ts` (under `/api/v1`); export `countriesRoutes` via `index.ts`
-- [ ] T030 [US3] Register `countriesRoutes` in `src/app.ts`
-- [ ] T031 [P] [US3] Route tests via `app.inject()` in `src/features/countries/routes.test.ts` — `/countries` → 3; `/countries/IDN/fields` ordered layout; `/countries/XX/fields` → 404 problem+json
-- [ ] T032 [US3] Parity test in `src/features/countries/service.test.ts` — for each country, the served `validation`+`options` drive the same accept/reject as `buildAddressValidator` for sample inputs (FR-014 / SC-003)
+- [X] T026 [US3] Add `listCountries()` and `getCountryFields(code)` to `src/features/countries/service.ts` — project registry entries to summaries + ordered field-def metadata; throw `NotFoundError` for unknown code
+- [X] T027 [US3] Define metadata response Zod schemas in `src/features/countries/schemas.ts` — `CountrySummary`, `FieldDef` (key,label,required,type,options?,validation?,order)
+- [X] T028 [P] [US3] Service tests in `src/features/countries/service.test.ts` — list returns 3; AUS fields expose exactly 8-state dropdown; USA zip validation length 5; unknown code → `NotFoundError`
+- [X] T029 [US3] Implement `GET /countries` and `GET /countries/:code/fields` in `src/features/countries/routes.ts` (under `/api/v1`); export `countriesRoutes` via `index.ts`
+- [X] T030 [US3] Register `countriesRoutes` in `src/app.ts`
+- [X] T031 [P] [US3] Route tests via `app.inject()` in `src/features/countries/routes.test.ts` — `/countries` → 3; `/countries/IDN/fields` ordered layout; `/countries/XX/fields` → 404 problem+json
+- [X] T032 [US3] Parity test in `src/features/countries/service.test.ts` — for each country, the served `validation`+`options` drive the same accept/reject as `buildAddressValidator` for sample inputs (FR-014 / SC-003)
 
 **Checkpoint**: All three stories complete; dynamic-metadata bonus delivered.
 
@@ -116,11 +116,11 @@ Single web-service project. Source in `src/`, co-located `*.test.ts`. Migrations
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T033 [P] Confirm `/docs` (dev-only) renders all 5 endpoints with generated schemas; no hand-edited spec (Principle VII)
-- [ ] T034 [P] Update `.env.example` if any new key introduced (none expected); confirm no `process.env` read outside `shared/config/env.ts`
-- [ ] T035 [P] Run `pnpm lint`, `pnpm type-check`, `pnpm test:ci` — all green; no `console.log`, no `any`, no bare `Error` (Principles I/IV/V)
-- [ ] T036 Walk `quickstart.md` scenarios 1–5 end-to-end against `pnpm dev`; confirm expected outcomes
-- [ ] T037 [P] Update `CLAUDE.md` folder-structure section to list `features/countries` + `features/addresses` and the `addresses` table (keep contract in sync)
+- [X] T033 [P] Confirm `/docs` (dev-only) renders all 5 endpoints with generated schemas; no hand-edited spec (Principle VII)
+- [X] T034 [P] Update `.env.example` if any new key introduced (none expected); confirm no `process.env` read outside `shared/config/env.ts`
+- [X] T035 [P] Run `pnpm lint`, `pnpm type-check`, `pnpm test:ci` — all green; no `console.log`, no `any`, no bare `Error` (Principles I/IV/V)
+- [X] T036 Walk `quickstart.md` scenarios 1–5 end-to-end against `pnpm dev`; confirm expected outcomes
+- [X] T037 [P] Update `CLAUDE.md` folder-structure section to list `features/countries` + `features/addresses` and the `addresses` table (keep contract in sync)
 
 ---
 

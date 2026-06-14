@@ -8,6 +8,8 @@ import { registerCors } from "./plugins/cors.js";
 import { registerErrorHandler } from "./plugins/error-handler.js";
 import { registerSwagger } from "./plugins/swagger.js";
 import { healthRoutes } from "./features/health/index.js";
+import { countriesRoutes } from "./features/countries/index.js";
+import { addressesRoutes } from "./features/addresses/index.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
   // pino v10 + Fastify 5 type incompatibility: loggerInstance propagates pino
@@ -33,6 +35,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   // Feature routes — health is untyped; typed routes use ZodTypeProvider
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (app as any).register(healthRoutes);
+  await app.register(countriesRoutes);
+  await app.register(addressesRoutes);
 
   return app;
 }

@@ -145,3 +145,7 @@ metadata (field names, validation rules).
 ```
 /speckit-tasks
 ```
+7. Run in terminal agents:
+```
+/speckit-implement
+```
