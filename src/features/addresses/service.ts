@@ -31,9 +31,12 @@ export async function createAddress(
   return toResponse(row);
 }
 
-export async function getAllAddresses(): Promise<AddressResponse[]> {
-  const rows = await listAddresses();
-  return rows.map(toResponse);
+export async function getAllAddresses(
+  limit = 50,
+  offset = 0,
+): Promise<{ addresses: AddressResponse[]; limit: number; offset: number }> {
+  const rows = await listAddresses(limit, offset);
+  return { addresses: rows.map(toResponse), limit, offset };
 }
 
 export async function getAddressById(id: string): Promise<AddressResponse> {

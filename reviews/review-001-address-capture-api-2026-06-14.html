@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Backend Review — address capture API</title>
+<style>
+  :root {
+    --bg: #0b0d10; --panel: #14171c; --panel-2: #1b1f26; --border: #262b33;
+    --text: #e7ecef; --muted: #8b95a1; --accent: #7aa2ff;
+    --critical: #ff4d4f; --critical-bg: rgba(255,77,79,.10); --critical-border: rgba(255,77,79,.35);
+    --high: #ff9a3c; --high-bg: rgba(255,154,60,.10); --high-border: rgba(255,154,60,.35);
+    --medium: #ffd166; --medium-bg: rgba(255,209,102,.10); --medium-border: rgba(255,209,102,.35);
+    --low: #7ad0a8; --low-bg: rgba(122,208,168,.10); --low-border: rgba(122,208,168,.35);
+    --code-bg: #0e1217;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f7f8fa; --panel:#fff; --panel-2:#f1f3f7; --border:#e3e6eb; --text:#1a1d22; --muted:#5a6573; --accent:#2b5cff; --code-bg:#f4f6fa; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background: var(--bg); color: var(--text); }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; line-height:1.55; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width:1040px; margin:0 auto; padding:32px 24px 96px; }
+  header.report-header { border:1px solid var(--border); background: var(--panel); border-radius:14px; padding:24px 28px; margin-bottom:28px; }
+  .report-header h1 { margin:0 0 6px; font-size:24px; letter-spacing:-0.01em; }
+  .report-header .scope { color: var(--muted); font-size:14px; margin:0 0 18px; }
+  .counts { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px; }
+  .count { display:inline-flex; align-items:center; gap:8px; font-size:13px; font-weight:600; padding:6px 12px; border-radius:999px; border:1px solid var(--border); background: var(--panel-2); }
+  .count .dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .count.c-critical .dot { background: var(--critical); }
+  .count.c-high .dot { background: var(--high); }
+  .count.c-medium .dot { background: var(--medium); }
+  .count.c-low .dot { background: var(--low); }
+  .verdict { display:inline-block; padding:8px 14px; border-radius:8px; font-weight:700; font-size:14px; border:1px solid var(--border); background: var(--panel-2); }
+  .verdict.block { color: var(--critical); border-color: var(--critical-border); background: var(--critical-bg); }
+  .verdict.changes { color: var(--high); border-color: var(--high-border); background: var(--high-bg); }
+  .verdict.approve { color: var(--low); border-color: var(--low-border); background: var(--low-bg); }
+  section.sev-section { margin-top:36px; }
+  section.sev-section > h2 { font-size:18px; letter-spacing:.02em; text-transform:uppercase; margin:0 0 14px; display:flex; align-items:center; gap:10px; }
+  section.sev-section > h2 .marker { width:10px; height:10px; border-radius:50%; }
+  section.sev-section.medium > h2 .marker { background: var(--medium); }
+  section.sev-section.low > h2 .marker { background: var(--low); }
+  article.finding { border:1px solid var(--border); background: var(--panel); border-radius:12px; padding:18px 20px; margin-bottom:14px; }
+  article.finding.sev-medium { border-left:4px solid var(--medium); }
+  article.finding.sev-low { border-left:4px solid var(--low); }
+  article.finding > header { display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+  .badge { font-size:11px; font-weight:800; letter-spacing:.08em; padding:4px 9px; border-radius:6px; border:1px solid var(--border); }
+  .badge.sev-medium { color: var(--medium); background: var(--medium-bg); border-color: var(--medium-border); }
+  .badge.sev-low { color: var(--low); background: var(--low-bg); border-color: var(--low-border); }
+  .tag { font-size:12px; color: var(--muted); padding:4px 8px; border-radius:6px; background: var(--panel-2); border:1px solid var(--border); }
+  article.finding h3 { margin:4px 0 6px; font-size:16px; letter-spacing:-0.005em; }
+  .loc { margin:0 0 10px; font-size:13px; color: var(--muted); }
+  .loc code { background: var(--code-bg); border:1px solid var(--border); padding:2px 6px; border-radius:5px; font-size:12.5px; }
+  .problem { margin:0 0 10px; }
+  .why { margin:0 0 10px; color: var(--text); }
+  .fix { background: var(--panel-2); border:1px solid var(--border); padding:10px 12px; border-radius:8px; margin-top:8px; }
+  .fix pre { margin:8px 0 0; background: var(--code-bg); border:1px solid var(--border); padding:12px 14px; border-radius:8px; overflow-x:auto; font-size:12.5px; line-height:1.5; }
+  .fix code, code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+  footer.notes { margin-top:40px; padding:20px 24px; border:1px solid var(--border); background: var(--panel); border-radius:12px; color: var(--muted); font-size:14px; }
+  footer.notes h3 { margin:0 0 8px; color: var(--text); font-size:15px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="report-header">
+    <h1>Backend Review — Country-Aware Address Capture API</h1>
+    <p class="scope">Branch <code>001-address-capture-api</code> vs <code>master</code> · commit 06ffe1e · 11 source files · features/countries, features/addresses, db/schema, error-handler · <span title="2026-06-14">2026-06-14</span></p>
+    <div class="counts">
+      <span class="count c-critical"><span class="dot"></span>0 Critical</span>
+      <span class="count c-high"><span class="dot"></span>0 High</span>
+      <span class="count c-medium"><span class="dot"></span>3 Medium</span>
+      <span class="count c-low"><span class="dot"></span>2 Low</span>
+    </div>
+    <div><span class="verdict approve">✅ APPROVE WITH COMMENTS — OK to merge now; fix the items below before this goes past a demo</span></div>
+  </header>
+
+  <section class="sev-section medium">
+    <h2><span class="marker"></span>Medium</h2>
+
+    <article class="finding sev-medium" data-cat="reliability">
+      <header><span class="badge sev-medium">MEDIUM</span><span class="tag">Reliability · Limits</span></header>
+      <h3>GET /addresses returns the whole table — no pagination, no LIMIT</h3>
+      <p class="loc"><code>src/features/addresses/repository.ts:22</code> · <code>src/features/addresses/routes.ts</code> (GET /api/v1/addresses)</p>
+      <p class="problem"><code>listAddresses()</code> runs <code>select().from(addresses).orderBy(desc(createdAt))</code> with no <code>.limit()</code>, so the route sends back every row in one big JSON array.</p>
+      <p class="why"><strong>Why it matters:</strong> Fine with a few rows, but it's the classic "fetch everything" endpoint that falls over in production. Once the table has a lot of rows, one request loads the whole thing into memory, builds a multi-MB response, and blocks Node while it does — a single call can slow down the whole server. There's also no cap, so nothing stops someone hammering it. This jumps to <em>High</em> once the table can grow without limits and is publicly reachable.</p>
+      <div class="fix"><strong>Fix:</strong> Add keyset (cursor) pagination, or at minimum a hard cap.
+        <pre><code>// repository.ts
+export async function listAddresses(limit = 50, before?: Date) {
+  const q = db.select().from(addresses)
+    .orderBy(desc(addresses.createdAt), desc(addresses.id))
+    .limit(Math.min(limit, 100));
+  return before ? q.where(lt(addresses.createdAt, before)) : q;
+}
+// route: parse ?limit & ?before via a Zod query schema, return a nextCursor</code></pre>
+      </div>
+    </article>
+
+    <article class="finding sev-medium" data-cat="reliability">
+      <header><span class="badge sev-medium">MEDIUM</span><span class="tag">Reliability · DB</span></header>
+      <h3>List order isn't stable when two rows share the same created_at</h3>
+      <p class="loc"><code>src/features/addresses/repository.ts:22</code></p>
+      <p class="problem">Sorting is by <code>desc(createdAt)</code> only. The primary key is <code>defaultRandom()</code> (uuid v4), which has no time built in, so two rows saved at the same instant have nothing to break the tie — their order can come out either way.</p>
+      <p class="why"><strong>Why it matters:</strong> This already happened in this build — the repository test had two inserts land on the same <code>now()</code>, the order flipped, and a fake 5 ms sleep was added to make it pass. In production it means the same request can return rows in a different order each time. And once pagination (above) is added, a tie sitting right on a page edge can drop or duplicate a row in the results.</p>
+      <div class="fix"><strong>Fix:</strong> Add a second sort key to break ties, and/or switch to a time-ordered primary key (uuid v7), which CLAUDE.md already lists as the default.
+        <pre><code>.orderBy(desc(addresses.createdAt), desc(addresses.id))
+// + when on PG18 / app-side gen: id uuid PK default uuidv7() → ordering & tiebreak in one</code></pre>
+      </div>
+    </article>
+
+    <article class="finding sev-medium" data-cat="security">
+      <header><span class="badge sev-medium">MEDIUM</span><span class="tag">Security · Validation</span></header>
+      <h3>Free-text address fields have no maximum length</h3>
+      <p class="loc"><code>src/features/countries/service.ts:56</code> (required text → <code>z.string().trim().min(1)</code>) · <code>src/features/addresses/schemas.ts:15</code> (<code>fields: z.record(z.string(), z.string())</code>)</p>
+      <p class="problem">The validator built from the registry limits postal codes and dropdowns, but every free-text field (line1, city, suburb, street, district, …) only checks <code>min(1)</code> with no <code>max</code>. Whatever the client sends gets saved as-is into the <code>fields</code> jsonb column.</p>
+      <p class="why"><strong>Why it matters:</strong> A client can send a ~1 MB string in any text field (the only limit is Fastify's default 1 MB body cap) and it's stored as-is. Easy way to bloat rows and waste storage, and those huge values come right back out through the list endpoint — which makes the no-pagination issue worse. No money or code-execution risk, so Medium not High.</p>
+      <div class="fix"><strong>Fix:</strong> Add a max length in the registry-built schema, and lower the body size limit for this route.
+        <pre><code>// service.ts fieldSchema — text branch
+base = z.string().trim().min(1).max(field.validation?.maxLength ?? 200);
+// optionally: app.register(addressesRoutes, { bodyLimit: 16 * 1024 })</code></pre>
+      </div>
+    </article>
+  </section>
+
+  <section class="sev-section low">
+    <h2><span class="marker"></span>Low</h2>
+
+    <article class="finding sev-low" data-cat="security">
+      <header><span class="badge sev-low">LOW</span><span class="tag">Security · Authz</span></header>
+      <h3>No auth on the read or write endpoints</h3>
+      <p class="loc"><code>src/features/addresses/routes.ts</code> (POST /api/v1/addresses, GET /api/v1/addresses[/:id])</p>
+      <p class="problem">There's no auth check on reads or writes. Anyone who can reach the service can add rows and read every stored address.</p>
+      <p class="why"><strong>Why it matters:</strong> This is a documented demo choice in <code>spec.md</code> (open endpoints), so it's Low, not High — but it has to be fixed before any real deploy. Addresses are personal data (PII): an open GET list hands out everyone's data at once, and an open POST lets anyone write — which combined with the no-max-length issue makes it trivial to fill up storage. Flagging it so it's a deliberate call at PR time, not something that slipped through.</p>
+      <div class="fix"><strong>Fix:</strong> Before prod, put both routes behind auth (owned by <code>senior-security-engineer</code> per CLAUDE.md), limit reads to the logged-in user, and rate-limit POST.</div>
+    </article>
+
+    <article class="finding sev-low" data-cat="security">
+      <header><span class="badge sev-low">LOW</span><span class="tag">Security · Validation</span></header>
+      <h3>Request body accepts any keys before the strict per-country check rejects them</h3>
+      <p class="loc"><code>src/features/addresses/schemas.ts:15</code></p>
+      <p class="problem">The Fastify body schema is <code>fields: z.record(z.string(), z.string())</code>, which accepts any number of arbitrary keys. The strict, country-specific check only runs later in the service, where unknown keys get rejected.</p>
+      <p class="why"><strong>Why it matters:</strong> The end result is correct (junk gets a 400), but only after Fastify has parsed and Zod has walked a potentially big map — wasted work on a request that was always going to fail. The body size limit keeps it bounded, so it's Low. Worth noting because it's basically free to fix.</p>
+      <div class="fix"><strong>Fix:</strong> Cap how many keys are allowed (pair it with the per-field max above).
+        <pre><code>fields: z.record(z.string().max(40), z.string().max(500))
+  .refine((o) => Object.keys(o).length <= 12, "too many fields")</code></pre>
+      </div>
+    </article>
+  </section>
+
+  <footer class="notes">
+    <h3>Reviewer notes</h3>
+    <div>
+      Solid, well-organized slice. What's good: Drizzle keeps every query parameterized (no SQL-injection risk — the uuid is validated by Zod before it reaches <code>eq()</code>); the registry as single source of truth keeps the metadata the API serves and the validator it checks against from drifting apart, and there's a test that proves it; typed errors map cleanly to the RFC 7807 problem format; the repository is the only file that touches <code>db</code>, as CLAUDE.md requires; <code>.strict()</code> on the per-country validator means junk never sneaks into the jsonb as "valid". What was checked: SQL injection (none — parameterized), auth/access control (open by design, flagged), input validation (the missing per-field length cap is the real gap), DB reliability (no pagination + unstable ordering), transactions/migrations (single-table insert, additive migration, nothing destructive — clean), secrets/logging (redaction works, no request bodies logged). Out of scope: the frontend that consumes this, the Google Places integration, and auth itself (left to <code>senior-security-engineer</code> per the hand-off). No Critical or High — nothing here moves money or runs attacker input. Fine to open the PR; fix the three Medium items before this table sees real traffic.
+    </div>
+  </footer>
+
+</div>
+</body>
+</html>

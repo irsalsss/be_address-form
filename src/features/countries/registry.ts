@@ -19,6 +19,8 @@ export interface FieldValidation {
   numeric?: boolean;
   /** explicit regex source, overrides length/numeric when present */
   pattern?: string;
+  /** max length for free-text fields (default 200) */
+  maxLength?: number;
 }
 
 export interface CountryFieldDef {

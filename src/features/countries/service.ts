@@ -53,7 +53,8 @@ function fieldSchema(field: CountryFieldDef): ZodTypeAny {
       : `^.{${len}}$`;
     base = z.string().regex(new RegExp(src));
   } else {
-    base = z.string().trim().min(1);
+    // Free text: bound the length so oversized values can't bloat the jsonb row.
+    base = z.string().trim().min(1).max(field.validation?.maxLength ?? 200);
   }
 
   return field.required ? base : base.optional();

@@ -5,6 +5,7 @@ import {
   addressResponseSchema,
   addressesResponseSchema,
   addressParamsSchema,
+  listAddressesQuerySchema,
 } from "./schemas.js";
 import {
   createAddress,
@@ -35,10 +36,11 @@ export async function addressesRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ["addresses"],
+        querystring: listAddressesQuerySchema,
         response: { 200: addressesResponseSchema },
       },
     },
-    async () => ({ addresses: await getAllAddresses() }),
+    async (req) => getAllAddresses(req.query.limit, req.query.offset),
   );
 
   typed.get(

@@ -100,6 +100,13 @@ describe("countries service — buildAddressValidator", () => {
     const { schema } = buildAddressValidator("USA");
     expect(() => schema.parse({ ...valid.USA, bogus: "x" })).toThrow();
   });
+
+  it("rejects over-long free-text fields (max 200)", () => {
+    const { schema } = buildAddressValidator("USA");
+    expect(() =>
+      schema.parse({ ...valid.USA, line1: "x".repeat(201) }),
+    ).toThrow();
+  });
 });
 
 describe("countries service — client/server parity (FR-014 / SC-003)", () => {

@@ -29,8 +29,22 @@ describe("addresses repository", () => {
     const a = await insertAddress("USA", { zip: "10001" });
     await new Promise((r) => setTimeout(r, 5)); // distinct created_at for ordering
     const b = await insertAddress("AUS", { postcode: "2000" });
-    const rows = await listAddresses();
+    const rows = await listAddresses(50, 0);
     expect(rows.map((r) => r.id)).toEqual([b.id, a.id]);
+  });
+
+  it("honors limit + offset", async () => {
+    for (let i = 0; i < 3; i++) {
+      await insertAddress("USA", { zip: `1000${i}` });
+      await new Promise((r) => setTimeout(r, 2));
+    }
+    const page1 = await listAddresses(2, 0);
+    const page2 = await listAddresses(2, 2);
+    expect(page1.length).toBe(2);
+    expect(page2.length).toBe(1);
+    // no overlap across pages
+    const ids = new Set([...page1, ...page2].map((r) => r.id));
+    expect(ids.size).toBe(3);
   });
 
   it("findAddressById returns null when absent", async () => {

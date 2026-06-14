@@ -18,8 +18,18 @@ export async function insertAddress(
   return row;
 }
 
-export async function listAddresses(): Promise<AddressRow[]> {
-  return db.select().from(addresses).orderBy(desc(addresses.createdAt));
+export async function listAddresses(
+  limit: number,
+  offset: number,
+): Promise<AddressRow[]> {
+  // Secondary `id` sort gives a deterministic tiebreak when two rows share the
+  // same created_at (uuid v4 PK carries no time component on its own).
+  return db
+    .select()
+    .from(addresses)
+    .orderBy(desc(addresses.createdAt), desc(addresses.id))
+    .limit(limit)
+    .offset(offset);
 }
 
 export async function findAddressById(id: string): Promise<AddressRow | null> {

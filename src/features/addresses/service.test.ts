@@ -50,7 +50,9 @@ describe("addresses service", () => {
       fields: { line1: "1 Macquarie St", suburb: "Sydney", state: "NSW", postcode: "2000" },
     });
     const all = await getAllAddresses();
-    expect(all.length).toBe(2);
+    expect(all.addresses.length).toBe(2);
+    expect(all.limit).toBe(50);
+    expect(all.offset).toBe(0);
   });
 
   it("getAddressById returns the record, or NotFound", async () => {

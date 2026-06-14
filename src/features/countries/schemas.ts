@@ -12,6 +12,7 @@ export const fieldValidationSchema = z.object({
   length: z.number().int().positive().optional(),
   numeric: z.boolean().optional(),
   pattern: z.string().optional(),
+  maxLength: z.number().int().positive().optional(),
 });
 
 export const fieldDefSchema = z.object({

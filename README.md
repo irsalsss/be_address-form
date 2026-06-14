@@ -133,19 +133,23 @@ Notes
 - Bonus: show how you would design the API to support dynamic country-specific        
 metadata (field names, validation rules).
 ```
-4. Run in terminal agents:
+4. Run in terminal agent:
 ```
 /speckit-specify
 ```
-5. Run in terminal agents:
+5. Run in terminal agent:
 ```
 /speckit-plan
 ```
-6. Run in terminal agents:
+6. Run in terminal agent:
 ```
 /speckit-tasks
 ```
-7. Run in terminal agents:
+7. Run in terminal agent:
 ```
 /speckit-implement
+```
+8. To review my changes, Run in terminal agent:
+```
+/senior-backend-reviewer, review all the pushed changes here before I create the PR. 
 ```

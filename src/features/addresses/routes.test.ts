@@ -78,6 +78,16 @@ describe("addresses routes", () => {
     const res = await app.inject({ method: "GET", url: "/api/v1/addresses" });
     expect(res.statusCode).toBe(200);
     expect(res.json().addresses.length).toBe(2);
+    expect(res.json().limit).toBe(50);
+  });
+
+  it("GET /addresses?limit=1 caps the page", async () => {
+    await post({ country: "USA", fields: { line1: "1 Loop", city: "C", state: "CA", zip: "95014" } });
+    await post({ country: "AUS", fields: { line1: "1 St", suburb: "Sydney", state: "NSW", postcode: "2000" } });
+    const res = await app.inject({ method: "GET", url: "/api/v1/addresses?limit=1" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().addresses.length).toBe(1);
+    expect(res.json().limit).toBe(1);
   });
 
   it("GET nonexistent id → 404 (distinct from empty-list 200)", async () => {
