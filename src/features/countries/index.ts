@@ -4,5 +4,9 @@ export {
   listCountries,
   getCountryFields,
 } from "./service.js";
-export { isSupportedCountry, normalizeCountryCode } from "./registry.js";
+export {
+  isSupportedCountry,
+  normalizeCountryCode,
+  hashCountryFields,
+} from "./registry.js";
 export type { CountryCode } from "./registry.js";

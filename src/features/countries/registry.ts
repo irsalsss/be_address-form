@@ -1,7 +1,9 @@
-// Country registry — SINGLE SOURCE OF TRUTH for field layouts + validation.
-// Both the metadata API and the submit-time Zod validator derive from these
-// definitions, so client and server rules cannot diverge (FR-014).
-// Adding a country = adding one entry here; no flow logic changes (FR-016).
+// Country registry — the one place that holds field layouts and validation.
+// The metadata API and the submit-time Zod validator both come from these
+// definitions, so the client and server rules stay the same (FR-014).
+// To add a country, add one entry here. No other code needs to change (FR-016).
+
+import { createHash } from "node:crypto";
 
 export type CountryCode = "USA" | "AUS" | "IDN";
 
@@ -17,7 +19,18 @@ export interface FieldValidation {
   length?: number;
   /** digits-only */
   numeric?: boolean;
-  /** explicit regex source, overrides length/numeric when present */
+  /**
+   * A regex pattern. When set, it is used instead of length/numeric.
+   *
+   * RULES FOR WRITING IT (sent to clients and built there — FR-008/009/010):
+   * - Write only the pattern text. Do not add `/.../` or flags.
+   * - It must work with `new RegExp(source)` and stay the same after going
+   *   through JSON (it is sent inside the metadata payload).
+   * - Do not use patterns that can be very slow, such as nested open-ended
+   *   repeats like `(x+)+`, `(x*)*`, or `(.*)*`. Keep them simple. Use
+   *   anchors and fixed limits where you can.
+   * A test in registry.test.ts checks these rules for the whole registry.
+   */
   pattern?: string;
   /** max length for free-text fields (default 200) */
   maxLength?: number;
@@ -98,10 +111,10 @@ const REGISTRY: Record<CountryCode, Country> = {
   },
 };
 
-// ISO alpha-2 → canonical alpha-3 aliases, so `us`/`au`/`id` resolve too.
+// Short 2-letter codes mapped to the main 3-letter codes, so `us`/`au`/`id` work too.
 const ALIASES: Record<string, CountryCode> = { US: "USA", AU: "AUS", ID: "IDN" };
 
-/** Normalize an arbitrary country input to a canonical code, or null. */
+/** Turn any country input into a known code, or return null. */
 export function normalizeCountryCode(input: string): CountryCode | null {
   const code = input.trim().toUpperCase();
   if (code in REGISTRY) return code as CountryCode;
@@ -118,4 +131,45 @@ export function getCountry(code: CountryCode): Country {
 
 export function listCountryEntries(): Country[] {
   return Object.values(REGISTRY);
+}
+
+// --- Hash of the field definitions (used as a cache version — FR-001..004) ---
+
+/**
+ * Builds a fixed-shape JSON for a field def. Keys are always written in the
+ * same order, so changing the order in the source code does NOT change the
+ * hash, but any real change to the content does. Optional values that are not
+ * set are left out (not written as null).
+ */
+function canonicalField(f: CountryFieldDef): unknown {
+  const out: Record<string, unknown> = {
+    key: f.key,
+    label: f.label,
+    required: f.required,
+    type: f.type,
+  };
+  if (f.options) out.options = f.options.map((o) => ({ value: o.value, label: o.label }));
+  if (f.validation) {
+    const v = f.validation;
+    const cv: Record<string, unknown> = {};
+    if (v.length !== undefined) cv.length = v.length;
+    if (v.numeric !== undefined) cv.numeric = v.numeric;
+    if (v.pattern !== undefined) cv.pattern = v.pattern;
+    if (v.maxLength !== undefined) cv.maxLength = v.maxLength;
+    out.validation = cv;
+  }
+  return out;
+}
+
+/**
+ * Makes a hash from a country's field definitions. It depends only on the
+ * content (including the field order), so it is the same across requests and
+ * after the process restarts. It changes only when the definitions change, and
+ * each country has its own value. Returns e.g. "sha256:1a2b3c4d5e6f7a8b". Used
+ * to check the cache only, not for security (see Assumptions in spec).
+ */
+export function hashCountryFields(fields: CountryFieldDef[]): string {
+  const canonical = JSON.stringify(fields.map(canonicalField));
+  const digest = createHash("sha256").update(canonical).digest("hex");
+  return `sha256:${digest.slice(0, 16)}`;
 }

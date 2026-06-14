@@ -171,6 +171,8 @@ Do not strip the extensions.
 - Schema: `src/shared/db/schema.ts` — **empty at scaffold**. Authoring is `senior-data-engineer`'s job.
 - Migrations: `pnpm db:generate` after schema changes, `pnpm db:migrate` to apply.
 - Local Postgres: `docker compose up -d db` (Port 5432, user/pass/db: `app`).
+  - If a host Postgres already holds `localhost:5432`, it shadows the container and DB commands hit the wrong DB (`role "app" does not exist`). Use a gitignored `docker-compose.override.yml` mapping `5433:5432` + `DATABASE_URL=...@localhost:5433/app` in `.env`. See README "Local Postgres on port 5432".
+  - `drizzle.config.ts` loads `.env` via `process.loadEnvFile` so `db:generate`/`db:migrate`/`db:studio` honor the same `DATABASE_URL` as the app (drizzle-kit does not auto-load `.env`).
 
 ## OpenAPI
 

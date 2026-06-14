@@ -29,7 +29,7 @@ Single backend service. Source: `src/features/countries/`, `src/features/address
 
 **Purpose**: Confirm baseline; no scaffolding required (existing feature folder, tooling, DB all in place).
 
-- [ ] T001 Confirm baseline green: run `pnpm lint`, `pnpm type-check`, `pnpm test:ci` and `docker compose up -d db` before changes.
+- [x] T001 Confirm baseline green: run `pnpm lint`, `pnpm type-check`, `pnpm test:ci` and `docker compose up -d db` before changes.
 
 ---
 
@@ -39,8 +39,8 @@ Single backend service. Source: `src/features/countries/`, `src/features/address
 
 **⚠️ CRITICAL**: T002–T003 block US1 (and the version surfaced by US2/US3 checks).
 
-- [ ] T002 Add pure `hashCountryFields(fields: CountryFieldDef[]): string` to `src/features/countries/registry.ts` — canonical JSON (declared field order; fixed sub-key order `key,label,required,type,options,validation`; omit absent optionals) → `node:crypto` SHA-256, return `"sha256:" + digestHex.slice(0,16)`. No new dependency. (research R1, data-model "Field Metadata Version")
-- [ ] T003 [P] Add authoring-rule doc comment on `FieldValidation.pattern` in `src/features/countries/registry.ts`: bare regex source (no delimiters/flags), JSON-round-trip-stable, no catastrophic backtracking. (FR-008/009/010)
+- [x] T002 Add pure `hashCountryFields(fields: CountryFieldDef[]): string` to `src/features/countries/registry.ts` — canonical JSON (declared field order; fixed sub-key order `key,label,required,type,options,validation`; omit absent optionals) → `node:crypto` SHA-256, return `"sha256:" + digestHex.slice(0,16)`. No new dependency. (research R1, data-model "Field Metadata Version")
+- [x] T003 [P] Add authoring-rule doc comment on `FieldValidation.pattern` in `src/features/countries/registry.ts`: bare regex source (no delimiters/flags), JSON-round-trip-stable, no catastrophic backtracking. (FR-008/009/010)
 
 **Checkpoint**: Hash helper available; user stories can proceed.
 
@@ -54,14 +54,14 @@ Single backend service. Source: `src/features/countries/`, `src/features/address
 
 ### Tests for User Story 1 ⚠️ (write first, must fail)
 
-- [ ] T004 [P] [US1] In `src/features/countries/registry.test.ts`, test `hashCountryFields`: deterministic across calls; `sha256:` prefix; differs when a cloned country's fields are mutated (add/remove/reorder/relabel/required-toggle/options/validation change); two distinct countries' hashes are independent. (FR-002/003/004, SC-002/003)
-- [ ] T005 [P] [US1] In `src/features/countries/service.test.ts`, test `getCountryFields("USA").version` equals a second call; equals the alias call `getCountryFields("US").version`; has `sha256:` prefix. (FR-001/015, SC-002)
+- [x] T004 [P] [US1] In `src/features/countries/registry.test.ts`, test `hashCountryFields`: deterministic across calls; `sha256:` prefix; differs when a cloned country's fields are mutated (add/remove/reorder/relabel/required-toggle/options/validation change); two distinct countries' hashes are independent. (FR-002/003/004, SC-002/003)
+- [x] T005 [P] [US1] In `src/features/countries/service.test.ts`, test `getCountryFields("USA").version` equals a second call; equals the alias call `getCountryFields("US").version`; has `sha256:` prefix. (FR-001/015, SC-002)
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] Add `version: z.string()` to `countryFieldsResponseSchema` (top level, alongside `code`/`name`/`fields`) in `src/features/countries/schemas.ts`. (FR-001, contracts/countries-fields.md)
-- [ ] T007 [US1] In `getCountryFields()` in `src/features/countries/service.ts`, set `version: hashCountryFields(country.fields)` on the returned object. (FR-001, depends on T002, T006)
-- [ ] T008 [P] [US1] Export `hashCountryFields` from `src/features/countries/index.ts` barrel if referenced by tests outside the file. (Principle III)
+- [x] T006 [US1] Add `version: z.string()` to `countryFieldsResponseSchema` (top level, alongside `code`/`name`/`fields`) in `src/features/countries/schemas.ts`. (FR-001, contracts/countries-fields.md)
+- [x] T007 [US1] In `getCountryFields()` in `src/features/countries/service.ts`, set `version: hashCountryFields(country.fields)` on the returned object. (FR-001, depends on T002, T006)
+- [x] T008 [P] [US1] Export `hashCountryFields` from `src/features/countries/index.ts` barrel if referenced by tests outside the file. (Principle III)
 
 **Checkpoint**: Fields endpoint returns stable, content-derived `version`; OpenAPI `/docs` shows it. MVP complete.
 
@@ -75,11 +75,11 @@ Single backend service. Source: `src/features/countries/`, `src/features/address
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T009 [P] [US2] In `src/features/countries/service.test.ts`, for every country from `listCountryEntries()`: assert each `getCountryFields(code).fields[i]` has `key,label,required,type` and `order === i`; every `type:"dropdown"` field has non-empty `options` with `value`+`label`; fields with constraints expose `validation`. (FR-005/006/007, SC-001)
+- [x] T009 [P] [US2] In `src/features/countries/service.test.ts`, for every country from `listCountryEntries()`: assert each `getCountryFields(code).fields[i]` has `key,label,required,type` and `order === i`; every `type:"dropdown"` field has non-empty `options` with `value`+`label`; fields with constraints expose `validation`. (FR-005/006/007, SC-001)
 
 ### Implementation for User Story 2
 
-- [ ] T010 [US2] Reconcile `fieldDefSchema`/projection in `src/features/countries/schemas.ts` + `src/features/countries/service.ts` with the completeness contract; fix any gap surfaced by T009 (else no-op — payload already complete). (FR-005/006/007, contracts/countries-fields.md)
+- [x] T010 [US2] Reconcile `fieldDefSchema`/projection in `src/features/countries/schemas.ts` + `src/features/countries/service.ts` with the completeness contract; fix any gap surfaced by T009 (else no-op — payload already complete). (FR-005/006/007, contracts/countries-fields.md)
 
 **Checkpoint**: One fields fetch per country fully drives render + client validation.
 
@@ -93,12 +93,12 @@ Single backend service. Source: `src/features/countries/`, `src/features/address
 
 ### Tests for User Story 5 ⚠️
 
-- [ ] T011 [P] [US5] In `src/features/addresses/service.test.ts` (real Postgres via `app.inject()` per Principle VI), assert `createAddress` rejects: unknown field key; wrong-length numeric (e.g. USA `zip:"123"`); invalid dropdown value; missing required field. Confirm valid payload still persists. (FR-013/014, SC-005)
-- [ ] T012 [P] [US5] In `src/features/countries/service.test.ts`, assert metadata↔validator parity: for each country, `buildAddressValidator(code).schema` is `.strict()` and rejects an unknown key; its enforced rules match the served `validation` for representative fields. (FR-012, SC-005)
+- [x] T011 [P] [US5] In `src/features/addresses/service.test.ts` (real Postgres via `app.inject()` per Principle VI), assert `createAddress` rejects: unknown field key; wrong-length numeric (e.g. USA `zip:"123"`); invalid dropdown value; missing required field. Confirm valid payload still persists. (FR-013/014, SC-005)
+- [x] T012 [P] [US5] In `src/features/countries/service.test.ts`, assert metadata↔validator parity: for each country, `buildAddressValidator(code).schema` is `.strict()` and rejects an unknown key; its enforced rules match the served `validation` for representative fields. (FR-012, SC-005)
 
 ### Implementation for User Story 5
 
-- [ ] T013 [US5] Confirm `buildAddressValidator`/`fieldSchema` in `src/features/countries/service.ts` unchanged and registry-derived; fix only if T011/T012 reveal a gap (expected no-op). (FR-012/013/014)
+- [x] T013 [US5] Confirm `buildAddressValidator`/`fieldSchema` in `src/features/countries/service.ts` unchanged and registry-derived; fix only if T011/T012 reveal a gap (expected no-op). (FR-012/013/014)
 
 **Checkpoint**: Server gate proven authoritative independent of client.
 
@@ -112,11 +112,11 @@ Single backend service. Source: `src/features/countries/`, `src/features/address
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T014 [P] [US3] In `src/features/countries/registry.test.ts`, registry-wide guard over `listCountryEntries()`: for every field with `validation.pattern` — `new RegExp(src)` compiles; `JSON.parse(JSON.stringify(src)) === src`; heuristic rejects nested unbounded quantifiers (`(x+)+`, `(x*)*`, `(.*)*`-style). Passes vacuously today (no patterns) and guards future additions. (FR-008/009/010, SC-004)
+- [x] T014 [P] [US3] In `src/features/countries/registry.test.ts`, registry-wide guard over `listCountryEntries()`: for every field with `validation.pattern` — `new RegExp(src)` compiles; `JSON.parse(JSON.stringify(src)) === src`; heuristic rejects nested unbounded quantifiers (`(x+)+`, `(x*)*`, `(.*)*`-style). Passes vacuously today (no patterns) and guards future additions. (FR-008/009/010, SC-004)
 
 ### Implementation for User Story 3
 
-- [ ] T015 [US3] No code change to existing patterns (none exist); ensure doc rule from T003 is present and accurate. (FR-010)
+- [x] T015 [US3] No code change to existing patterns (none exist); ensure doc rule from T003 is present and accurate. (FR-010)
 
 **Checkpoint**: Pattern contract enforced by test for current + future countries.
 
@@ -130,11 +130,11 @@ Single backend service. Source: `src/features/countries/`, `src/features/address
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T016 [P] [US4] In `src/features/countries/service.test.ts`, assert `listCountries()` returns one entry per `listCountryEntries()` country, each with non-empty `code` + `name`. (FR-011, SC-006)
+- [x] T016 [P] [US4] In `src/features/countries/service.test.ts`, assert `listCountries()` returns one entry per `listCountryEntries()` country, each with non-empty `code` + `name`. (FR-011, SC-006)
 
 ### Implementation for User Story 4
 
-- [ ] T017 [US4] Confirm `listCountries()` + `countriesResponseSchema` unchanged and complete; no-op unless T016 fails. (FR-011, contracts/countries-list.md)
+- [x] T017 [US4] Confirm `listCountries()` + `countriesResponseSchema` unchanged and complete; no-op unless T016 fails. (FR-011, contracts/countries-list.md)
 
 **Checkpoint**: Selector data confirmed.
 
@@ -142,10 +142,10 @@ Single backend service. Source: `src/features/countries/`, `src/features/address
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T018 Run `pnpm lint`, `pnpm type-check`, `pnpm test:ci` — all green. (Quality gate)
-- [ ] T019 [P] Verify `/docs` (dev) shows `version` on the fields response schema. (FR-001, Principle VII)
-- [ ] T020 [P] Execute `specs/002-country-metadata-contract/quickstart.md` scenarios 1–5 against `pnpm dev`. (SC-001..006)
-- [ ] T021 Update `CLAUDE.md` countries-feature notes if the fields-response shape (now incl. `version`) needs documenting; keep code + docs in sync. (Governance)
+- [x] T018 Run `pnpm lint`, `pnpm type-check`, `pnpm test:ci` — all green. (Quality gate)
+- [x] T019 [P] Verify `/docs` (dev) shows `version` on the fields response schema. (FR-001, Principle VII)
+- [x] T020 [P] Execute `specs/002-country-metadata-contract/quickstart.md` scenarios 1–5 against `pnpm dev`. (SC-001..006)
+- [x] T021 Update `CLAUDE.md` countries-feature notes if the fields-response shape (now incl. `version`) needs documenting; keep code + docs in sync. (Governance)
 
 ---
 

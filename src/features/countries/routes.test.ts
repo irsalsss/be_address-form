@@ -19,6 +19,9 @@ describe("countries routes", () => {
     expect(body.countries.map((c: { code: string }) => c.code)).toEqual([
       "USA", "AUS", "IDN",
     ]);
+    for (const c of body.countries as { version: string }[]) {
+      expect(c.version).toMatch(/^sha256:[0-9a-f]{16}$/);
+    }
   });
 
   it("GET /api/v1/countries/IDN/fields returns ordered layout", async () => {
@@ -29,6 +32,7 @@ describe("countries routes", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.code).toBe("IDN");
+    expect(body.version).toMatch(/^sha256:[0-9a-f]{16}$/);
     expect(body.fields.map((f: { key: string }) => f.key)).toEqual([
       "province", "city", "district", "village", "postalCode", "street",
     ]);
