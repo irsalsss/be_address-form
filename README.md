@@ -141,3 +141,7 @@ metadata (field names, validation rules).
 ```
 /speckit-plan
 ```
+6. Run in terminal agents:
+```
+/speckit-tasks
+```
