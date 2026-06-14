@@ -33,8 +33,10 @@ skills: senior-be-architect
 prompt: initiate Fastify, Typescript
 
 2. Init [spec-kit](https://github.com/github/spec-kit)
-3. /speckit-constitution add principles for this project that will cater all the needs 
-  in this reqs (for FE only):                                                                       
+3. Run in terminal agents:
+```
+/speckit-constitution add principles for this project that will cater all the needs 
+  in this reqs (for BE only):                                                                       
   Background                                                                          
                                                                                       
   AcmeCorp is building a new customer onboarding flow that collects user addresses.   
@@ -130,3 +132,8 @@ Notes
                                                                                       
 - Bonus: show how you would design the API to support dynamic country-specific        
 metadata (field names, validation rules).
+```
+4. Run in terminal agents:
+```
+/speckit-specify
+```
