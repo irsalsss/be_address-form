@@ -1,21 +1,24 @@
 import { describe, it, expect } from "vitest";
 import {
-  listCountryEntries,
-  normalizeCountryCode,
-  isSupportedCountry,
-  getCountry,
+  SEED_COUNTRIES,
+  seedCountryEntries,
+  canonicalizeCode,
   hashCountryFields,
+  isSafePattern,
+  MAX_PATTERN_LENGTH,
   type CountryFieldDef,
 } from "./registry.js";
 
-describe("country registry", () => {
+describe("country seed data", () => {
   it("exposes exactly the three launch countries", () => {
-    const codes = listCountryEntries().map((c) => c.code).sort();
+    const codes = seedCountryEntries()
+      .map((c) => c.code)
+      .sort();
     expect(codes).toEqual(["AUS", "IDN", "USA"]);
   });
 
   it("every dropdown field has a non-empty options set", () => {
-    for (const country of listCountryEntries()) {
+    for (const country of seedCountryEntries()) {
       for (const field of country.fields) {
         if (field.type === "dropdown") {
           expect(field.options, `${country.code}.${field.key}`).toBeDefined();
@@ -28,7 +31,7 @@ describe("country registry", () => {
   });
 
   it("field keys are unique within each country", () => {
-    for (const country of listCountryEntries()) {
+    for (const country of seedCountryEntries()) {
       const keys = country.fields.map((f) => f.key);
       expect(new Set(keys).size).toBe(keys.length);
     }
@@ -36,7 +39,7 @@ describe("country registry", () => {
 
   it("matches the required-field layout per spec", () => {
     const required = (code: "USA" | "AUS" | "IDN") =>
-      getCountry(code).fields.filter((f) => f.required).map((f) => f.key).sort();
+      SEED_COUNTRIES[code]!.fields.filter((f) => f.required).map((f) => f.key).sort();
     expect(required("USA")).toEqual(["city", "line1", "state", "zip"]);
     expect(required("AUS")).toEqual(["line1", "postcode", "state", "suburb"]);
     expect(required("IDN")).toEqual(
@@ -45,108 +48,104 @@ describe("country registry", () => {
   });
 
   it("AUS state dropdown is exactly the 8 states/territories", () => {
-    const state = getCountry("AUS").fields.find((f) => f.key === "state");
+    const state = SEED_COUNTRIES.AUS!.fields.find((f) => f.key === "state");
     expect(state!.options!.map((o) => o.value)).toEqual([
       "NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT",
     ]);
   });
+});
 
-  it("normalizes casing and rejects unknown codes", () => {
-    expect(normalizeCountryCode("us")).toBe("USA");
-    expect(normalizeCountryCode("  idn ")).toBe("IDN");
-    expect(normalizeCountryCode("XX")).toBeNull();
-    expect(isSupportedCountry("aus")).toBe(true);
-    expect(isSupportedCountry("fr")).toBe(false);
+describe("canonicalizeCode — pure normalization (no existence check)", () => {
+  it("uppercases, trims, and resolves 2-letter aliases", () => {
+    expect(canonicalizeCode("us")).toBe("USA");
+    expect(canonicalizeCode("  id ")).toBe("IDN");
+    expect(canonicalizeCode("au")).toBe("AUS");
+  });
+
+  it("passes through unknown but well-formed codes (existence is the DB's job)", () => {
+    expect(canonicalizeCode("FRA")).toBe("FRA");
+    expect(canonicalizeCode("xx")).toBe("XX");
+  });
+
+  it("rejects blank or wrong-length input", () => {
+    expect(canonicalizeCode("")).toBeNull();
+    expect(canonicalizeCode("U")).toBeNull();
+    expect(canonicalizeCode("USAA")).toBeNull();
   });
 });
 
 describe("hashCountryFields — content-derived version (FR-001..004)", () => {
-  const usa = () => getCountry("USA").fields;
+  const usa = () => SEED_COUNTRIES.USA!.fields;
 
-  it("is deterministic and sha256-prefixed", () => {
+  it("is stable across calls for the same content", () => {
     const a = hashCountryFields(usa());
     const b = hashCountryFields(usa());
     expect(a).toBe(b);
     expect(a).toMatch(/^sha256:[0-9a-f]{16}$/);
   });
 
-  it("changes when any field definition changes", () => {
+  it("changes when a label, requiredness, order, field set, validation, or option changes", () => {
     const base = hashCountryFields(usa());
-    const clone = (): CountryFieldDef[] =>
-      usa().map((f) => ({ ...f, options: f.options ? [...f.options] : undefined }));
 
-    // relabel
-    const relabel = clone();
-    relabel[0] = { ...relabel[0]!, label: "Street" };
+    const relabel = structuredClone(usa());
+    relabel[0]!.label = "Different";
     expect(hashCountryFields(relabel)).not.toBe(base);
 
-    // required toggle
-    const reqToggle = clone();
-    reqToggle[1] = { ...reqToggle[1]!, required: !reqToggle[1]!.required };
+    const reqToggle = structuredClone(usa());
+    reqToggle[0]!.required = !reqToggle[0]!.required;
     expect(hashCountryFields(reqToggle)).not.toBe(base);
 
-    // reorder
-    const reordered = clone();
-    [reordered[0], reordered[1]] = [reordered[1]!, reordered[0]!];
+    const reordered = [...usa()].reverse();
     expect(hashCountryFields(reordered)).not.toBe(base);
 
-    // add field
-    const added = clone();
-    added.push({ key: "extra", label: "Extra", required: false, type: "text" });
+    const added = [...usa(), { key: "x", label: "X", required: false, type: "text" } as CountryFieldDef];
     expect(hashCountryFields(added)).not.toBe(base);
 
-    // remove field
-    const removed = clone().slice(0, -1);
+    const removed = usa().slice(0, -1);
     expect(hashCountryFields(removed)).not.toBe(base);
 
-    // validation change
-    const valChange = clone();
-    const zipIdx = valChange.findIndex((f) => f.key === "zip");
-    valChange[zipIdx] = {
-      ...valChange[zipIdx]!,
-      validation: { length: 9, numeric: true },
-    };
+    const valChange = structuredClone(usa());
+    const zip = valChange.find((f) => f.key === "zip")!;
+    zip.validation = { length: 6, numeric: true };
     expect(hashCountryFields(valChange)).not.toBe(base);
 
-    // option-set change
-    const optChange = clone();
-    const stateIdx = optChange.findIndex((f) => f.key === "state");
-    optChange[stateIdx] = {
-      ...optChange[stateIdx]!,
-      options: [{ value: "CA", label: "CA" }],
-    };
+    const optChange = structuredClone(SEED_COUNTRIES.USA!.fields);
+    const st = optChange.find((f) => f.key === "state")!;
+    st.options = [{ value: "CA", label: "CA" }];
     expect(hashCountryFields(optChange)).not.toBe(base);
   });
 
-  it("is independent per country", () => {
-    const codes = ["USA", "AUS", "IDN"] as const;
-    const hashes = codes.map((c) => hashCountryFields(getCountry(c).fields));
-    expect(new Set(hashes).size).toBe(codes.length);
+  it("differs per country", () => {
+    const hashes = seedCountryEntries().map((c) => hashCountryFields(c.fields));
+    expect(new Set(hashes).size).toBe(hashes.length);
   });
 });
 
-describe("validation.pattern safety (FR-008/009/010, SC-004)", () => {
-  // A simple check for nested open-ended repeats — the common slow
-  // backtracking shape, e.g. (x+)+, (x*)*, (.*)* .
-  const CATASTROPHIC = /\(([^()]*[*+])[^()]*\)\s*[*+]/;
-
-  const patterns = listCountryEntries().flatMap((c) =>
-    c.fields
-      .filter((f) => f.validation?.pattern !== undefined)
-      .map((f) => ({ where: `${c.code}.${f.key}`, src: f.validation!.pattern! })),
-  );
-
-  it("every exposed pattern compiles, round-trips JSON, and is backtracking-safe", () => {
-    for (const { where, src } of patterns) {
-      expect(() => new RegExp(src), where).not.toThrow();
-      expect(JSON.parse(JSON.stringify(src)), where).toBe(src);
-      expect(CATASTROPHIC.test(src), `${where} catastrophic`).toBe(false);
+describe("isSafePattern — ReDoS guard (Guard 1, FR-008/009/010)", () => {
+  it("accepts every pattern in the seed data", () => {
+    for (const country of seedCountryEntries()) {
+      for (const f of country.fields) {
+        const p = f.validation?.pattern;
+        if (p !== undefined) {
+          expect(isSafePattern(p), `${country.code}.${f.key}`).toBe(true);
+        }
+      }
     }
   });
 
-  it("guard rejects a known catastrophic pattern", () => {
-    // self-check, so an empty pattern list above can't hide a broken guard
-    expect(CATASTROPHIC.test("(a+)+")).toBe(true);
-    expect(CATASTROPHIC.test("^\\d{5}$")).toBe(false);
+  it("rejects nested open-ended repeats (catastrophic backtracking)", () => {
+    expect(isSafePattern("(a+)+")).toBe(false);
+    expect(isSafePattern("(.*)*")).toBe(false);
+    expect(isSafePattern("(x*)*$")).toBe(false);
+  });
+
+  it("rejects oversized and uncompilable patterns", () => {
+    expect(isSafePattern("a".repeat(MAX_PATTERN_LENGTH + 1))).toBe(false);
+    expect(isSafePattern("(")).toBe(false);
+  });
+
+  it("accepts simple anchored patterns", () => {
+    expect(isSafePattern("^\\d{5}$")).toBe(true);
+    expect(isSafePattern("^[A-Z]{2}$")).toBe(true);
   });
 });

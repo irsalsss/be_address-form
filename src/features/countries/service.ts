@@ -1,29 +1,32 @@
 import { z, type ZodTypeAny } from "zod";
-import { NotFoundError, BadRequestError } from "../../shared/errors.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../../shared/errors.js";
 import {
+  canonicalizeCode,
+  hashCountryFields,
+  isSafePattern,
   type Country,
   type CountryFieldDef,
-  getCountry,
-  hashCountryFields,
-  listCountryEntries,
-  normalizeCountryCode,
 } from "./registry.js";
-import type { CountrySummary, CountryFieldsResponse } from "./schemas.js";
+import {
+  insertCountry,
+  selectAllCountries,
+  selectCountryByCode,
+  updateCountry as updateCountryRow,
+} from "./repository.js";
+import type { CountrySummary, CountryFieldsResponse, WriteCountryRequest } from "./schemas.js";
 
-// --- Turn registry data into API response objects ---
+// --- Turn stored country rows into API response objects ---
 
-export function listCountries(): CountrySummary[] {
-  return listCountryEntries().map((c) => ({
+export async function listCountries(): Promise<CountrySummary[]> {
+  const all = await selectAllCountries();
+  return all.map((c) => ({
     code: c.code,
     name: c.name,
     version: hashCountryFields(c.fields),
   }));
 }
 
-export function getCountryFields(codeInput: string): CountryFieldsResponse {
-  const code = normalizeCountryCode(codeInput);
-  if (!code) throw new NotFoundError(`unsupported country: ${codeInput}`);
-  const country = getCountry(code);
+function toFieldsResponse(country: Country): CountryFieldsResponse {
   return {
     code: country.code,
     name: country.name,
@@ -40,7 +43,14 @@ export function getCountryFields(codeInput: string): CountryFieldsResponse {
   };
 }
 
-// --- Build the submit-time validator from the same registry as metadata (FR-014) ---
+export async function getCountryFields(codeInput: string): Promise<CountryFieldsResponse> {
+  const code = canonicalizeCode(codeInput);
+  const country = code ? await selectCountryByCode(code) : null;
+  if (!country) throw new NotFoundError(`unsupported country: ${codeInput}`);
+  return toFieldsResponse(country);
+}
+
+// --- Build the submit-time validator from the same stored row as metadata (FR-014) ---
 
 function fieldSchema(field: CountryFieldDef): ZodTypeAny {
   // Messages are human-readable and field-labelled because clients surface them
@@ -60,11 +70,7 @@ function fieldSchema(field: CountryFieldDef): ZodTypeAny {
       .regex(new RegExp(field.validation.pattern), `${label} has an invalid format`);
   } else if (field.validation?.numeric || field.validation?.length) {
     const len = field.validation.length;
-    const src = field.validation.numeric
-      ? len
-        ? `^\\d{${len}}$`
-        : `^\\d+$`
-      : `^.{${len}}$`;
+    const src = field.validation.numeric ? (len ? `^\\d{${len}}$` : `^\\d+$`) : `^.{${len}}$`;
     const msg = field.validation.numeric
       ? len
         ? `${label} must be exactly ${len} digits`
@@ -95,16 +101,83 @@ function fieldSchema(field: CountryFieldDef): ZodTypeAny {
  * `.strict()` blocks unknown keys, so bad data is never stored as valid
  * (SC-002). Throws BadRequestError if the country is not supported.
  */
-export function buildAddressValidator(codeInput: string): {
-  code: Country["code"];
+export async function buildAddressValidator(codeInput: string): Promise<{
+  code: string;
   schema: z.ZodObject<Record<string, ZodTypeAny>>;
-} {
-  const code = normalizeCountryCode(codeInput);
-  if (!code) throw new BadRequestError(`unsupported country: ${codeInput}`);
-  const country = getCountry(code);
+}> {
+  const code = canonicalizeCode(codeInput);
+  const country = code ? await selectCountryByCode(code) : null;
+  if (!country) throw new BadRequestError(`unsupported country: ${codeInput}`);
 
   const shape: Record<string, ZodTypeAny> = {};
   for (const field of country.fields) shape[field.key] = fieldSchema(field);
 
-  return { code, schema: z.object(shape).strict() };
+  return { code: country.code, schema: z.object(shape).strict() };
+}
+
+// --- Write path: author countries at runtime (admin) ------------------------
+
+/**
+ * Structural validation runs in the route via Zod. Here we enforce the two
+ * security/consistency rules that Zod can't express cleanly:
+ *  - Guard 1: every regex `pattern` must be ReDoS-safe (isSafePattern).
+ *  - a dropdown field must carry at least one option, else the derived submit
+ *    validator would reject every value.
+ * Throws BadRequestError (→ 400) on violation.
+ */
+function assertFieldsAreSafe(fields: CountryFieldDef[]): void {
+  const keys = new Set<string>();
+  for (const f of fields) {
+    if (keys.has(f.key)) {
+      throw new BadRequestError(`duplicate field key: ${f.key}`);
+    }
+    keys.add(f.key);
+
+    if (f.type === "dropdown" && (f.options?.length ?? 0) === 0) {
+      throw new BadRequestError(`dropdown field "${f.key}" needs at least one option`);
+    }
+    const pattern = f.validation?.pattern;
+    if (pattern !== undefined && !isSafePattern(pattern)) {
+      throw new BadRequestError(`field "${f.key}" has an unsafe or invalid regex pattern`);
+    }
+  }
+}
+
+function toCountry(input: WriteCountryRequest, code: string): Country {
+  return {
+    code,
+    name: input.name,
+    // Drop any client-sent `order`; field order is positional in the array.
+    fields: input.fields.map((f) => ({
+      key: f.key,
+      label: f.label,
+      required: f.required,
+      type: f.type,
+      ...(f.options ? { options: f.options } : {}),
+      ...(f.validation ? { validation: f.validation } : {}),
+    })),
+  };
+}
+
+export async function createCountry(input: WriteCountryRequest): Promise<CountryFieldsResponse> {
+  const code = canonicalizeCode(input.code);
+  if (!code) throw new BadRequestError(`invalid country code: ${input.code}`);
+  assertFieldsAreSafe(input.fields as CountryFieldDef[]);
+
+  const created = await insertCountry(toCountry(input, code));
+  if (!created) throw new ConflictError(`country already exists: ${code}`);
+  return toFieldsResponse(created);
+}
+
+export async function updateCountry(
+  codeInput: string,
+  input: WriteCountryRequest,
+): Promise<CountryFieldsResponse> {
+  const code = canonicalizeCode(codeInput);
+  if (!code) throw new BadRequestError(`invalid country code: ${codeInput}`);
+  assertFieldsAreSafe(input.fields as CountryFieldDef[]);
+
+  const updated = await updateCountryRow(code, toCountry(input, code));
+  if (!updated) throw new NotFoundError(`unsupported country: ${codeInput}`);
+  return toFieldsResponse(updated);
 }

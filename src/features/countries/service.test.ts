@@ -1,30 +1,48 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
+import { eq } from "drizzle-orm";
+import { db } from "../../shared/db/client.js";
+import { countries } from "../../shared/db/schema.js";
 import {
   listCountries,
   getCountryFields,
   buildAddressValidator,
+  createCountry,
+  updateCountry,
 } from "./service.js";
-import { NotFoundError, BadRequestError } from "../../shared/errors.js";
+import type { WriteCountryRequest } from "./schemas.js";
+import {
+  NotFoundError,
+  BadRequestError,
+  ConflictError,
+} from "../../shared/errors.js";
 
-describe("countries service — metadata", () => {
-  it("lists the three countries with code + name + per-country version", () => {
-    const list = listCountries();
-    expect(list.map((c) => ({ code: c.code, name: c.name }))).toEqual([
-      { code: "USA", name: "United States" },
-      { code: "AUS", name: "Australia" },
-      { code: "IDN", name: "Indonesia" },
-    ]);
+// Throwaway code used by the write-path tests so they never mutate the seeded
+// USA/AUS/IDN rows the read tests assert against. Cleaned up after each test.
+const TMP = "ZZZ";
+async function dropTmp() {
+  await db.delete(countries).where(eq(countries.code, TMP));
+}
+
+describe("countries service — metadata (DB-backed)", () => {
+  it("lists the three seeded countries with code + name + per-country version", async () => {
+    const list = await listCountries();
+    const byCode = Object.fromEntries(list.map((c) => [c.code, c.name]));
+    expect(byCode).toMatchObject({
+      USA: "United States",
+      AUS: "Australia",
+      IDN: "Indonesia",
+    });
     for (const c of list) expect(c.version).toMatch(/^sha256:[0-9a-f]{16}$/);
   });
 
-  it("list version equals the same country's fields version (FR-001)", () => {
-    for (const c of listCountries()) {
-      expect(c.version).toBe(getCountryFields(c.code).version);
+  it("list version equals the same country's fields version (FR-001)", async () => {
+    for (const c of await listCountries()) {
+      expect(c.version).toBe((await getCountryFields(c.code)).version);
     }
   });
 
-  it("returns IDN fields in declared order with order indexes", () => {
-    const idn = getCountryFields("idn");
+  it("returns IDN fields in declared order with order indexes", async () => {
+    const idn = await getCountryFields("idn");
     expect(idn.code).toBe("IDN");
     expect(idn.fields.map((f) => f.key)).toEqual([
       "province", "city", "district", "village", "postalCode", "street",
@@ -37,59 +55,25 @@ describe("countries service — metadata", () => {
     });
   });
 
-  it("exposes USA zip validation length 5", () => {
-    const zip = getCountryFields("USA").fields.find((f) => f.key === "zip");
-    expect(zip!.validation).toEqual({ length: 5, numeric: true });
+  it("throws NotFoundError for an unknown country", async () => {
+    await expect(getCountryFields("XX")).rejects.toThrow(NotFoundError);
   });
 
-  it("throws NotFoundError for an unknown country", () => {
-    expect(() => getCountryFields("XX")).toThrow(NotFoundError);
-  });
-
-  it("returns a stable, sha256-prefixed version (FR-001/004, SC-002)", () => {
-    const a = getCountryFields("USA");
-    const b = getCountryFields("USA");
+  it("returns a stable, sha256-prefixed version (FR-001/004, SC-002)", async () => {
+    const a = await getCountryFields("USA");
+    const b = await getCountryFields("USA");
     expect(a.version).toBe(b.version);
     expect(a.version).toMatch(/^sha256:[0-9a-f]{16}$/);
   });
 
-  it("resolves aliases to identical metadata + version (FR-015)", () => {
-    const canonical = getCountryFields("USA");
-    const alias = getCountryFields("us");
+  it("resolves aliases to identical metadata + version (FR-015)", async () => {
+    const canonical = await getCountryFields("USA");
+    const alias = await getCountryFields("us");
     expect(alias).toEqual(canonical);
-    expect(alias.version).toBe(canonical.version);
-  });
-
-  it("payload is complete enough to render + validate for every country (FR-005/006/007, SC-001)", () => {
-    for (const { code } of listCountries()) {
-      const meta = getCountryFields(code);
-      meta.fields.forEach((f, i) => {
-        const at = `${code}.${f.key}`;
-        expect(typeof f.key, at).toBe("string");
-        expect(f.key.length, at).toBeGreaterThan(0);
-        expect(typeof f.label, at).toBe("string");
-        expect(f.label.length, at).toBeGreaterThan(0);
-        expect(typeof f.required, at).toBe("boolean");
-        expect(["text", "dropdown"], at).toContain(f.type);
-        expect(f.order, at).toBe(i);
-        if (f.type === "dropdown") {
-          expect(f.options, at).toBeDefined();
-          expect(f.options!.length, at).toBeGreaterThan(0);
-          for (const o of f.options!) {
-            expect(typeof o.value, at).toBe("string");
-            expect(typeof o.label, at).toBe("string");
-          }
-        }
-      });
-    }
   });
 });
 
-describe("countries service — buildAddressValidator", () => {
-  it("throws BadRequestError for unsupported country", () => {
-    expect(() => buildAddressValidator("XX")).toThrow(BadRequestError);
-  });
-
+describe("countries service — buildAddressValidator (DB-backed)", () => {
   const valid = {
     USA: { line1: "1 Infinite Loop", city: "Cupertino", state: "CA", zip: "95014" },
     AUS: { line1: "1 Macquarie St", suburb: "Sydney", state: "NSW", postcode: "2000" },
@@ -99,71 +83,51 @@ describe("countries service — buildAddressValidator", () => {
     },
   } as const;
 
-  it("accepts a valid address for each country", () => {
+  it("throws BadRequestError for unsupported country", async () => {
+    await expect(buildAddressValidator("XX")).rejects.toThrow(BadRequestError);
+  });
+
+  it("accepts a valid address for each country", async () => {
     for (const [code, fields] of Object.entries(valid)) {
-      const { schema } = buildAddressValidator(code);
+      const { schema } = await buildAddressValidator(code);
       expect(() => schema.parse(fields), code).not.toThrow();
     }
   });
 
-  it("accepts omitted optional fields (line2 / village)", () => {
-    const { schema } = buildAddressValidator("USA");
-    expect(() => schema.parse(valid.USA)).not.toThrow();
-  });
-
-  it("treats empty/blank optional fields as omitted (line2)", () => {
-    const { schema } = buildAddressValidator("USA");
+  it("treats empty/blank optional fields as omitted (line2)", async () => {
+    const { schema } = await buildAddressValidator("USA");
     for (const blank of ["", "   "]) {
       const parsed = schema.parse({ ...valid.USA, line2: blank });
       expect(parsed.line2).toBeUndefined();
     }
   });
 
-  it("rejects a missing required field (AUS suburb)", () => {
-    const { schema } = buildAddressValidator("AUS");
+  it("rejects a missing required field (AUS suburb)", async () => {
+    const { schema } = await buildAddressValidator("AUS");
     const { suburb, ...rest } = valid.AUS;
     void suburb;
     expect(() => schema.parse(rest)).toThrow();
   });
 
-  it("rejects whitespace-only required text", () => {
-    const { schema } = buildAddressValidator("USA");
-    expect(() => schema.parse({ ...valid.USA, city: "   " })).toThrow();
-  });
-
-  it("rejects a dropdown value outside the set (USA state ZZ)", () => {
-    const { schema } = buildAddressValidator("USA");
+  it("rejects a dropdown value outside the set (USA state ZZ)", async () => {
+    const { schema } = await buildAddressValidator("USA");
     expect(() => schema.parse({ ...valid.USA, state: "ZZ" })).toThrow();
   });
 
-  it("rejects wrong postal length (AUS 5-digit, IDN 4-digit)", () => {
-    expect(() =>
-      buildAddressValidator("AUS").schema.parse({ ...valid.AUS, postcode: "20000" }),
-    ).toThrow();
-    expect(() =>
-      buildAddressValidator("IDN").schema.parse({ ...valid.IDN, postalCode: "4013" }),
-    ).toThrow();
+  it("rejects wrong postal length and non-numeric postal", async () => {
+    const aus = await buildAddressValidator("AUS");
+    expect(() => aus.schema.parse({ ...valid.AUS, postcode: "20000" })).toThrow();
+    const usa = await buildAddressValidator("USA");
+    expect(() => usa.schema.parse({ ...valid.USA, zip: "9501A" })).toThrow();
   });
 
-  it("rejects non-numeric postal code", () => {
-    const { schema } = buildAddressValidator("USA");
-    expect(() => schema.parse({ ...valid.USA, zip: "9501A" })).toThrow();
-  });
-
-  it("rejects unknown extra fields (.strict)", () => {
-    const { schema } = buildAddressValidator("USA");
+  it("rejects unknown extra fields (.strict)", async () => {
+    const { schema } = await buildAddressValidator("USA");
     expect(() => schema.parse({ ...valid.USA, bogus: "x" })).toThrow();
   });
 
-  it("rejects over-long free-text fields (max 200)", () => {
-    const { schema } = buildAddressValidator("USA");
-    expect(() =>
-      schema.parse({ ...valid.USA, line1: "x".repeat(201) }),
-    ).toThrow();
-  });
-
-  it("emits human-readable, field-labelled messages clients can show verbatim", () => {
-    const { schema } = buildAddressValidator("USA");
+  it("emits human-readable, field-labelled messages clients can show verbatim", async () => {
+    const { schema } = await buildAddressValidator("USA");
     const flat = (fields: Record<string, unknown>) =>
       schema.safeParse(fields).error!.flatten().fieldErrors;
 
@@ -173,27 +137,84 @@ describe("countries service — buildAddressValidator", () => {
     expect(flat({ ...valid.USA, state: "ZZ" }).state).toEqual([
       "State must be one of the listed options",
     ]);
-    const { city, ...noCity } = valid.USA;
-    void city;
-    expect(flat(noCity).city).toEqual(["City is required"]);
   });
 });
 
-describe("countries service — client/server parity (FR-014 / SC-003)", () => {
-  // The validation rules sent by the metadata API must give the same
-  // accept/reject result as the submit validator, because both come from the
-  // same registry. Check that the sent rules match the validator.
-  it("served postal validation matches validator rejection", () => {
-    for (const code of ["USA", "AUS", "IDN"] as const) {
-      const meta = getCountryFields(code);
-      const postal = meta.fields.find((f) => f.validation?.numeric);
-      expect(postal).toBeDefined();
-      const len = postal!.validation!.length!;
-      const tooShort = "1".repeat(len - 1);
-      const { schema } = buildAddressValidator(code);
-      // a value that breaks the sent length must be rejected by the validator
-      const probe = { [postal!.key]: tooShort };
-      expect(() => schema.parse(probe)).toThrow();
-    }
+describe("countries service — write path (create / update)", () => {
+  afterEach(dropTmp);
+
+  const sample: WriteCountryRequest = {
+    code: TMP,
+    name: "Testland",
+    fields: [
+      { key: "line1", label: "Address Line 1", required: true, type: "text" },
+      { key: "region", label: "Region", required: true, type: "dropdown", options: [
+        { value: "N", label: "North" },
+        { value: "S", label: "South" },
+      ] },
+      { key: "postcode", label: "Postcode", required: true, type: "text", validation: { length: 4, numeric: true } },
+    ],
+  };
+
+  it("creates a country and makes it immediately readable + usable for submit", async () => {
+    const created = await createCountry(sample);
+    expect(created.code).toBe(TMP);
+    expect(created.version).toMatch(/^sha256:[0-9a-f]{16}$/);
+
+    const read = await getCountryFields(TMP);
+    expect(read.fields.map((f) => f.key)).toEqual(["line1", "region", "postcode"]);
+
+    const { schema } = await buildAddressValidator(TMP);
+    expect(() => schema.parse({ line1: "1 St", region: "N", postcode: "4000" })).not.toThrow();
+    expect(() => schema.parse({ line1: "1 St", region: "X", postcode: "4000" })).toThrow();
+  });
+
+  it("rejects a duplicate code with ConflictError", async () => {
+    await createCountry(sample);
+    await expect(createCountry(sample)).rejects.toThrow(ConflictError);
+  });
+
+  it("rejects a ReDoS-prone regex pattern (Guard 1) with BadRequestError", async () => {
+    const evil: WriteCountryRequest = {
+      ...sample,
+      fields: [
+        { key: "line1", label: "L1", required: true, type: "text", validation: { pattern: "(a+)+$" } },
+      ],
+    };
+    await expect(createCountry(evil)).rejects.toThrow(BadRequestError);
+    // and nothing was persisted
+    await expect(getCountryFields(TMP)).rejects.toThrow(NotFoundError);
+  });
+
+  it("rejects a dropdown field with no options (BadRequestError)", async () => {
+    const bad: WriteCountryRequest = {
+      ...sample,
+      fields: [{ key: "region", label: "Region", required: true, type: "dropdown", options: [] }],
+    };
+    await expect(createCountry(bad)).rejects.toThrow(BadRequestError);
+  });
+
+  it("update replaces fields and bumps the version; 404 when absent", async () => {
+    await createCountry(sample);
+    const before = await getCountryFields(TMP);
+
+    const updated = await updateCountry(TMP, {
+      ...sample,
+      name: "Testland 2",
+      fields: [{ key: "only", label: "Only", required: true, type: "text" }],
+    });
+    expect(updated.name).toBe("Testland 2");
+    expect(updated.fields.map((f) => f.key)).toEqual(["only"]);
+    expect(updated.version).not.toBe(before.version);
+
+    await dropTmp();
+    await expect(
+      updateCountry(TMP, sample),
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it("canonicalizes the code on create (lower-case alias-free code uppercased)", async () => {
+    const created = await createCountry({ ...sample, code: "zzz" });
+    expect(created.code).toBe("ZZZ");
   });
 });

@@ -24,7 +24,7 @@ export async function createAddress(
 ): Promise<AddressResponse> {
   // Build the country's strict validator from the registry and parse `fields`.
   // A bad country throws BadRequestError; bad fields throw ZodError → 400.
-  const { code, schema } = buildAddressValidator(input.country);
+  const { code, schema } = await buildAddressValidator(input.country);
   const fields = schema.parse(input.fields) as Record<string, string>;
 
   const row = await insertAddress(code, fields);

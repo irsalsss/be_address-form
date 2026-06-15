@@ -1,11 +1,21 @@
-// Country registry — the one place that holds field layouts and validation.
-// The metadata API and the submit-time Zod validator both come from these
-// definitions, so the client and server rules stay the same (FR-014).
-// To add a country, add one entry here. No other code needs to change (FR-016).
+// Country registry — types, the canonical SEED data, and the pure helpers
+// (code canonicalization, content hash, regex-safety guard) shared by the
+// DB-backed service and the seed script.
+//
+// Countries are now stored in the `countries` table (see shared/db/schema.ts),
+// authored at runtime via the write API. SEED_COUNTRIES below is loaded once by
+// src/shared/db/seed.ts. To change a built-in country's defaults, edit it here
+// and re-run the seed; to add a country at runtime, POST /api/v1/countries.
+//
+// The metadata API and the submit-time Zod validator both read the same stored
+// rows, so client and server rules stay identical (FR-014).
 
 import { createHash } from "node:crypto";
 
-export type CountryCode = "USA" | "AUS" | "IDN";
+// Country codes are runtime data now (a country can be added via the API), so
+// this is a plain string rather than a closed union. The SEED entries below
+// still use canonical ISO-alpha-3 codes.
+export type CountryCode = string;
 
 export type FieldType = "text" | "dropdown";
 
@@ -74,7 +84,10 @@ const IDN_PROVINCES = opt([
   "Maluku", "Maluku Utara", "Papua", "Papua Barat",
 ]);
 
-const REGISTRY: Record<CountryCode, Country> = {
+// Canonical built-in countries. Loaded into the `countries` table by the seed
+// script (idempotent). This is seed data, not the live source of truth — the
+// service reads from the DB.
+export const SEED_COUNTRIES: Record<string, Country> = {
   USA: {
     code: "USA",
     name: "United States",
@@ -114,23 +127,43 @@ const REGISTRY: Record<CountryCode, Country> = {
 // Short 2-letter codes mapped to the main 3-letter codes, so `us`/`au`/`id` work too.
 const ALIASES: Record<string, CountryCode> = { US: "USA", AU: "AUS", ID: "IDN" };
 
-/** Turn any country input into a known code, or return null. */
-export function normalizeCountryCode(input: string): CountryCode | null {
+/**
+ * Normalize a country code to its canonical stored form: trim, uppercase, and
+ * resolve known 2-letter aliases (`us` → `USA`). This is a pure string
+ * transform — it does NOT guarantee the country exists. Existence is a DB
+ * lookup in the service. Returns null only for blank/oversized input.
+ */
+export function canonicalizeCode(input: string): CountryCode | null {
   const code = input.trim().toUpperCase();
-  if (code in REGISTRY) return code as CountryCode;
-  return ALIASES[code] ?? null;
+  if (code.length < 2 || code.length > 3) return null;
+  return ALIASES[code] ?? code;
 }
 
-export function isSupportedCountry(input: string): boolean {
-  return normalizeCountryCode(input) !== null;
+/** All seed countries as a list (for the seed script and seed-integrity tests). */
+export function seedCountryEntries(): Country[] {
+  return Object.values(SEED_COUNTRIES);
 }
 
-export function getCountry(code: CountryCode): Country {
-  return REGISTRY[code];
-}
+// --- Regex-safety guard (Guard 1: ReDoS) -----------------------------------
 
-export function listCountryEntries(): Country[] {
-  return Object.values(REGISTRY);
+/** Max characters allowed in a user-authored validation `pattern`. */
+export const MAX_PATTERN_LENGTH = 200;
+
+// Detects nested open-ended repeats — the common catastrophic-backtracking
+// shape, e.g. (x+)+, (x*)*, (.*)* . Same rule the registry has always enforced;
+// now applied at write-time to API-authored patterns, not just at build-time.
+const CATASTROPHIC = /\(([^()]*[*+])[^()]*\)\s*[*+]/;
+
+/** True if a regex source is short, compilable, and not obviously catastrophic. */
+export function isSafePattern(source: string): boolean {
+  if (source.length > MAX_PATTERN_LENGTH) return false;
+  if (CATASTROPHIC.test(source)) return false;
+  try {
+    new RegExp(source);
+  } catch {
+    return false;
+  }
+  return true;
 }
 
 // --- Hash of the field definitions (used as a cache version — FR-001..004) ---

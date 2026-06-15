@@ -8,6 +8,13 @@
       "when": 1781423924442,
       "tag": "0000_hesitant_jigsaw",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1781490947306,
+      "tag": "0001_parallel_scarlet_spider",
+      "breakpoints": true
     }
   ]
 }

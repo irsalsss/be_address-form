@@ -3,10 +3,8 @@ export {
   buildAddressValidator,
   listCountries,
   getCountryFields,
+  createCountry,
+  updateCountry,
 } from "./service.js";
-export {
-  isSupportedCountry,
-  normalizeCountryCode,
-  hashCountryFields,
-} from "./registry.js";
+export { canonicalizeCode, hashCountryFields, isSafePattern } from "./registry.js";
 export type { CountryCode } from "./registry.js";

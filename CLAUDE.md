@@ -37,16 +37,19 @@ src/
     health/
       routes.ts         GET /health
       index.ts          barrel export
-    countries/          country metadata = single source of truth
-      registry.ts       USA/AUS/IDN field layouts + validation rules (data, not code)
-      service.ts        list/get metadata; buildAddressValidator() derives Zod from registry
-      schemas.ts        metadata response Zod schemas
-      routes.ts         GET /api/v1/countries, GET /api/v1/countries/:code/fields
-      index.ts          barrel (exports validator + metadata + normalizeCountryCode)
+    countries/          DB-backed country metadata catalog
+      registry.ts       SEED data (USA/AUS/IDN) + pure helpers: canonicalizeCode, hashCountryFields, isSafePattern (ReDoS guard)
+      repository.ts     ONLY db importer — select/insert/update on countries table
+      service.ts        async list/get metadata; buildAddressValidator() derives Zod from stored row; createCountry/updateCountry
+      schemas.ts        metadata response + write-request Zod schemas
+      seed.ts           idempotent seedCountries() (insert SEED_COUNTRIES, ON CONFLICT DO NOTHING)
+      seed-cli.ts       `pnpm db:seed` entry — seeds then closes the pool
+      routes.ts         GET + POST /api/v1/countries, GET /:code/fields, PUT /:code
+      index.ts          barrel (validator + metadata + write fns + canonicalizeCode)
     addresses/          capture + retrieve addresses
       schemas.ts        create request / address response Zod schemas
       repository.ts     ONLY db importer — insert/list/findById on addresses table
-      service.ts        validate via countries registry, persist, map
+      service.ts        validate via countries (await buildAddressValidator), persist, map
       routes.ts         POST /api/v1/addresses, GET /api/v1/addresses[/:id]
       index.ts          barrel
   plugins/
@@ -61,8 +64,8 @@ src/
     http/
       problem.ts        RFC 7807 ProblemDetails + toProblem() helper
     db/
-      client.ts         drizzle(postgres(env.DATABASE_URL))
-      schema.ts         addresses table (id, country_code, fields jsonb, created_at)
+      client.ts         drizzle(postgres(env.DATABASE_URL)) + closeDb() for scripts
+      schema.ts         addresses table + countries table (code PK, name, fields jsonb, timestamps)
 tests/
   health.test.ts        Vitest — uses app.inject() (no real socket)
   setup.ts              NODE_ENV=test, PORT=0
@@ -81,6 +84,7 @@ pnpm test               # vitest watch
 pnpm test:ci            # vitest run (single pass)
 pnpm db:generate        # drizzle-kit generate (diff schema → migrations)
 pnpm db:migrate         # drizzle-kit migrate
+pnpm db:seed            # seed built-in countries (idempotent; run after migrate)
 pnpm db:studio          # drizzle-kit studio (browser UI)
 docker compose up -d db # start local Postgres 17
 ```
@@ -170,6 +174,8 @@ Do not strip the extensions.
 - Connection: `src/shared/db/client.ts` reads `DATABASE_URL` from env.
 - Schema: `src/shared/db/schema.ts` — **empty at scaffold**. Authoring is `senior-data-engineer`'s job.
 - Migrations: `pnpm db:generate` after schema changes, `pnpm db:migrate` to apply.
+- Seed: after `db:migrate`, run `pnpm db:seed` to load the built-in countries (idempotent).
+- **Countries are DB-backed and runtime-editable** via `POST/PUT /api/v1/countries`. `registry.ts` holds only the SEED data + pure helpers; the live source of truth is the `countries` table. ⚠️ The write path is **intentionally unauthenticated for now** (handoff "Guard 2" deferred) — add an admin guard (`senior-security-engineer`) before exposing it beyond a trusted network. ReDoS validation on submitted regex patterns (Guard 1, `isSafePattern`) **is** enforced and must stay.
 - Local Postgres: `docker compose up -d db` (Port 5432, user/pass/db: `app`).
   - If a host Postgres already holds `localhost:5432`, it shadows the container and DB commands hit the wrong DB (`role "app" does not exist`). Use a gitignored `docker-compose.override.yml` mapping `5433:5432` + `DATABASE_URL=...@localhost:5433/app` in `.env`. See README "Local Postgres on port 5432".
   - `drizzle.config.ts` loads `.env` via `process.loadEnvFile` so `db:generate`/`db:migrate`/`db:studio` honor the same `DATABASE_URL` as the app (drizzle-kit does not auto-load `.env`).
